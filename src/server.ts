@@ -1,0 +1,248 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
+// ============================================================================
+// GLOBAL ERROR HANDLERS - Catch all unhandled errors
+// ============================================================================
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔴 UNHANDLED REJECTION');
+  console.error('Promise:', promise);
+  console.error('Reason:', reason);
+  if (reason && typeof reason === 'object' && 'stack' in reason) {
+    console.error('Stack:', reason.stack);
+  } else {
+    console.error('Stack: No stack trace available');
+  }
+  // DO NOT call process.exit() - let the server continue running
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('🔴 UNCAUGHT EXCEPTION');
+  console.error('Error:', error.message);
+  console.error('Stack:', error.stack);
+  // DO NOT call process.exit() - let the server continue running
+});
+
+// Verify environment variables are loaded
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL ERROR: JWT_SECRET is not defined.");
+  process.exit(1);
+}
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const rateLimit = require("express-rate-limit");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./config/swagger").default;
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/authRoutes");
+const workspaceRoutes = require("./routes/workspaceRoutes");
+const { workspaceSpaceRouter, spaceRouter } = require("./routes/spaceRoutes");
+const spaceMemberRoutes = require("./routes/spaceMemberRoutes");
+const { spaceInvitationRouter, invitationRouter: spaceInvitationStandaloneRouter } = require("./routes/spaceInvitationRoutes");
+const { spaceFolderRouter, folderRouter } = require("./routes/folderRoutes");
+const folderMemberRoutes = require("./routes/folderMemberRoutes");
+const { spaceListRouter, listRouter } = require("./routes/listRoutes");
+const listMemberRoutes = require("./routes/listMemberRoutes");
+const { listTaskRouter, taskRouter } = require("./routes/taskRoutes");
+const { workspaceInvitationRouter, inviteRouter, publicInviteRouter } = require("./routes/invitationRoutes");
+const { workspaceChatRouter, chatRouter } = require("./routes/chatRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const notificationCenterRoutes = require("./routes/notificationCenterRoutes");
+const presenceRoutes = require("./routes/presenceRoutes");
+const { taskCommentRouter, commentRouter } = require("./routes/commentRoutes");
+const directMessageRoutes = require("./routes/directMessageRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
+const customFieldRouter = require("./routes/customFieldRoutes");
+const dashboardRouter = require("./routes/dashboardRoutes");
+const taskDependencyRoutes = require("./routes/taskDependencyRoutes");
+const timeEntryRoutes = require("./routes/timeEntryRoutes");
+const recurringRoutes = require("./routes/recurringRoutes");
+const ganttRoutes = require("./routes/ganttRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
+const attachmentRoutes = require("./routes/attachmentRoutes");
+const activityRoutes = require("./routes/activityRoutes");
+const searchRoutes = require("./routes/searchRoutes");
+const timeTrackingRoutes = require("./routes/timeTrackingRoutes");
+const memberRoutes = require("./routes/memberRoutes");
+const documentRoutes = require("./routes/documentRoutes");
+const initializeSocketIO = require("./socket");
+const { initializeFirebase } = require("./config/firebase");
+const cron = require("node-cron");
+const recurringService = require("./services/recurringService");
+connectDB();
+// Initialize Firebase Admin SDK
+initializeFirebase();
+// Note: Redis is NOT used - we use in-memory socket management via socketService
+// See backend/MULTI_DEVICE_SOCKET_IMPLEMENTATION.md for details
+// Start notification worker (if needed)
+// require("./workers/notification.worker");
+const app = express();
+const httpServer = http.createServer(app);
+// Initialize Socket.io
+const io = initializeSocketIO(httpServer);
+// Make io accessible to routes (optional, for debugging)
+app.set("io", io);
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500, // increase for development
+  skip: (req) => req.method === "OPTIONS",
+  message: "Too many requests from this IP, please try again later"
+});
+app.use("/api/", limiter);
+app.use(express.json());
+app.get("/", (_req, res) => {
+  res.send("API is running...");
+});
+// Health check endpoint
+app.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Swagger API Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "ClickUp Clone API Documentation"
+}));
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/workspaces", workspaceRoutes);
+app.use("/api/workspaces/:workspaceId/spaces", workspaceSpaceRouter);
+app.use("/api/spaces", spaceRouter);
+app.use("/api/spaces/:spaceId/space-members", spaceMemberRoutes);
+app.use("/api/spaces/:spaceId/invitations", spaceInvitationRouter);
+app.use("/api/space-invitations", spaceInvitationStandaloneRouter);
+app.use("/api/spaces/:spaceId/folders", spaceFolderRouter);
+app.use("/api/folders", folderRouter);
+app.use("/api/folders/:folderId/folder-members", folderMemberRoutes);
+app.use("/api/spaces/:spaceId/lists", spaceListRouter);
+app.use("/api/lists", listRouter);
+app.use("/api/lists/:listId/list-members", listMemberRoutes);
+app.use("/api/lists/:listId/tasks", listTaskRouter);
+app.use("/api/tasks", taskRouter);
+// OLD COMMENT SYSTEM - REPLACED BY ACTIVITY SYSTEM
+// app.use("/api/tasks/:taskId/comments", taskCommentRouter);
+// app.use("/api/comments", commentRouter);
+app.use("/api/dm", directMessageRoutes);
+app.use("/api/workspaces/:workspaceId/invites", workspaceInvitationRouter);
+app.use("/api/workspaces/:workspaceId/chat", workspaceChatRouter);
+app.use("/api/invites", inviteRouter);
+app.use("/api/chat", chatRouter);
+app.use("/api/notifications/devices", notificationRoutes);
+app.use("/api/notifications", notificationCenterRoutes);
+app.use("/api/presence", presenceRoutes); // Presence routes
+app.use("/api", uploadRoutes); // File upload routes
+app.use("/api/custom-fields", customFieldRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/task-dependencies", taskDependencyRoutes);
+app.use("/api/time", timeEntryRoutes);
+app.use("/api/recurring", recurringRoutes);
+app.use("/api/gantt", ganttRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api", attachmentRoutes);
+app.use("/api", activityRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/tasks", timeTrackingRoutes);
+app.use("/api/workspaces/:workspaceId/members", memberRoutes);
+app.use("/api/docs", documentRoutes);
+// Public routes (no authentication)
+app.use("/api/invites", publicInviteRouter);
+// Error handler middleware (must be last)
+const errorHandler = require("./middlewares/errorMiddleware");
+app.use(errorHandler);
+const PORT = Number(process.env.PORT) || 5000;
+httpServer.listen(PORT, () => {
+  console.log(`[Server] HTTP server running on port ${PORT}`);
+  console.log(`[Server] WebSocket server ready`);
+  // Initialize recurring task cron job
+  // Runs every hour at minute 0
+  cron.schedule("0 * * * *", async () => {
+    console.log("[Cron] Running recurring task processor...");
+    try {
+      const result = await recurringService.processRecurringTasks();
+      console.log(`[Cron] Recurring tasks processed: ${result.created} created, ${result.errors} errors`);
+    } catch (error) {
+      console.error("[Cron] Error processing recurring tasks:", error);
+    }
+  });
+  console.log("[Cron] Recurring task processor scheduled (runs every hour)");
+});
+// ============================================================================
+// GRACEFUL SHUTDOWN - Safe cleanup even if modules are missing
+// ============================================================================
+const gracefulShutdown = async (signal) => {
+  console.log(`[Server] ${signal} received, shutting down gracefully...`);
+  
+  // Close socket connections first to prevent "User Disconnected" flood
+  try {
+    console.log('[Server] Closing socket connections...');
+    if (io) {
+      // Disconnect all sockets
+      io.disconnectSockets();
+      console.log('[Server] ✓ All socket connections closed');
+    }
+  } catch (error) {
+    console.error('[Server] Error closing sockets:', error);
+  }
+  
+  // Try to close queue (if it exists)
+  try {
+    const { closeQueue } = require("./queues/notification.queue");
+    await closeQueue();
+    console.log('[Server] ✓ Queue closed');
+  } catch (error) {
+    console.log('[Server] Queue not available or already closed (this is OK)');
+  }
+  
+  // Try to close worker (if it exists)
+  try {
+    const { closeWorker } = require("./workers/notification.worker");
+    await closeWorker();
+    console.log('[Server] ✓ Worker closed');
+  } catch (error) {
+    console.log('[Server] Worker not available or already closed (this is OK)');
+  }
+  
+  // Try to close Redis (if it exists)
+  try {
+    const { closeRedis } = require("./config/redis");
+    await closeRedis();
+    console.log('[Server] ✓ Redis closed');
+  } catch (error) {
+    console.log('[Server] Redis not available or already closed (this is OK)');
+  }
+  
+  // Close HTTP server
+  httpServer.close(() => {
+    console.log("[Server] ✓ HTTP server closed");
+    console.log("[Server] Shutdown complete");
+    process.exit(0);
+  });
+  
+  // Force exit after 10 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.error("[Server] ⚠️ Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000);
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+export {};

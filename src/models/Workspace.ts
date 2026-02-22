@@ -1,0 +1,73 @@
+import { Document, Schema } from "mongoose";
+
+const mongoose = require("mongoose");
+
+// Workspace roles - matches permission system
+export enum WorkspaceRole {
+  OWNER = "owner",
+  ADMIN = "admin",
+  MEMBER = "member",
+  GUEST = "guest"
+}
+
+export interface IWorkspaceMember {
+  user: Schema.Types.ObjectId;
+  role: WorkspaceRole | "owner" | "admin" | "member" | "guest";
+}
+
+export interface IWorkspace extends Document {
+  name: string;
+  owner: Schema.Types.ObjectId;
+  members: IWorkspaceMember[];
+  isDeleted: boolean;
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const workspaceSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Please provide workspace name"],
+      trim: true,
+      maxlength: [100, "Workspace name cannot exceed 100 characters"]
+    },
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+    members: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true
+        },
+        role: {
+          type: String,
+          enum: ["owner", "admin", "member", "guest"],
+          default: "member"
+        }
+      }
+    ],
+    isDeleted: {
+      type: Boolean,
+      default: false
+    },
+    deletedAt: {
+      type: Date
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+
+// Index for faster queries
+workspaceSchema.index({ owner: 1, isDeleted: 1 });
+workspaceSchema.index({ "members.user": 1, isDeleted: 1 });
+
+module.exports = mongoose.model("Workspace", workspaceSchema);
+export {};
