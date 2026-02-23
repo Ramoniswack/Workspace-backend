@@ -4,6 +4,7 @@ const {
   updateMemberRole,
   removeMember,
   inviteMember,
+  updateMyStatus,
 } = require("../controllers/memberController");
 const { protect } = require("../middlewares/authMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
@@ -15,6 +16,9 @@ router.get("/", protect, requirePermission("VIEW_WORKSPACE"), getWorkspaceMember
 
 // POST /api/workspaces/:workspaceId/members/invite - Invite member (admin or owner)
 router.post("/invite", protect, requirePermission("INVITE_MEMBER"), inviteMember);
+
+// PATCH /api/workspaces/:workspaceId/members/me/status - Update own status (any member)
+router.patch("/me/status", protect, requirePermission("VIEW_WORKSPACE"), updateMyStatus);
 
 // PATCH /api/workspaces/:workspaceId/members/:userId - Update member role (owner only)
 router.patch("/:userId", protect, requirePermission("CHANGE_MEMBER_ROLE"), updateMemberRole);

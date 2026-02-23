@@ -11,6 +11,9 @@ const {
 // All routes require authentication
 router.use(protect);
 
+// Register FCM token for web push notifications
+router.post("/fcm-token", notificationController.registerFCMToken);
+
 // Register device for push notifications
 router.post(
   "/register",

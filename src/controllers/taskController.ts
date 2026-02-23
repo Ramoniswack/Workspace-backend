@@ -93,14 +93,6 @@ const deleteTask = asyncHandler(async (req: AuthRequest, res: Response, next: Ne
   });
 });
 
-module.exports = {
-  createTask,
-  getListTasks,
-  getTask,
-  updateTask,
-  deleteTask
-};
-
 // @desc    Create subtask
 // @route   POST /api/tasks/:taskId/subtasks
 // @access  Private

@@ -123,7 +123,7 @@ class FolderService {
       return memberId === userId;
     });
 
-    console.log(`[FolderService] User access:`, { isOwner, isAdmin, isSpaceMember });
+    console.log(`[FolderService] User access:`, { isOwner, isAdmin });
 
     // Get folders with their lists
     const folders = await Folder.find({
@@ -140,12 +140,13 @@ class FolderService {
     // Determine which lists user can access
     let accessibleListIds: string[];
     
-    if (isOwner || isAdmin || isSpaceMember) {
+    // Only owners and admins can see all lists
+    if (isOwner || isAdmin) {
       // Full access - can see all lists
       accessibleListIds = allLists.map((list: any) => list._id.toString());
-      console.log(`[FolderService] User has full access to all ${accessibleListIds.length} lists`);
+      console.log(`[FolderService] User is owner/admin, has access to all ${accessibleListIds.length} lists`);
     } else {
-      // Filter to only lists where user is a list member
+      // For regular members (including space members), filter to only lists where user is a list member
       const userListMemberships = await ListMember.find({
         user: userId,
         space: spaceId
@@ -173,7 +174,7 @@ class FolderService {
     );
 
     // Filter out folders with no accessible lists (for non-admin/owner users)
-    const filteredFolders = (isOwner || isAdmin || isSpaceMember) 
+    const filteredFolders = (isOwner || isAdmin) 
       ? foldersWithLists 
       : foldersWithLists.filter((folder: any) => folder.lists.length > 0);
 

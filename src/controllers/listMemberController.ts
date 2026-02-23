@@ -37,25 +37,28 @@ const getListMembers = asyncHandler(
     );
 
     // Format response with override info
-    const members = workspace.members.map((member: any) => {
-      const override = listMembers.find(
-        (lm: any) => lm.user._id.toString() === member.user._id.toString()
-      );
+    // Filter out admins and owners as they have full access by default
+    const members = workspace.members
+      .filter((member: any) => member.role === 'member') // Only include regular members
+      .map((member: any) => {
+        const override = listMembers.find(
+          (lm: any) => lm.user._id.toString() === member.user._id.toString()
+        );
 
-      return {
-        _id: member.user._id,
-        name: member.user.name,
-        email: member.user.email,
-        avatar: member.user.avatar,
-        workspaceRole: member.role,
-        listPermissionLevel: override?.permissionLevel || null,
-        hasOverride: !!override,
-        addedBy: override?.addedBy?.name || null,
-        addedAt: override?.createdAt || null,
-      };
-    });
+        return {
+          _id: member.user._id,
+          name: member.user.name,
+          email: member.user.email,
+          avatar: member.user.avatar,
+          workspaceRole: member.role,
+          listPermissionLevel: override?.permissionLevel || null,
+          hasOverride: !!override,
+          addedBy: override?.addedBy?.name || null,
+          addedAt: override?.createdAt || null,
+        };
+      });
 
-    console.log('[ListMemberController] Members retrieved', { count: members.length });
+    console.log('[ListMemberController] Members retrieved (excluding admins/owners)', { count: members.length });
 
     res.status(200).json({
       success: true,
@@ -131,6 +134,17 @@ const addListMember = asyncHandler(
     if (!isWorkspaceMember) {
       return next(
         new AppError("User must be a workspace member first", 400)
+      );
+    }
+
+    // Check if user is admin or owner - they don't need list permissions
+    const workspaceMember = workspace.members.find(
+      (m: any) => m.user.toString() === userId
+    );
+
+    if (workspaceMember && (workspaceMember.role === 'admin' || workspaceMember.role === 'owner')) {
+      return next(
+        new AppError("Admins and owners have full access by default and cannot be added to list members", 400)
       );
     }
 

@@ -122,6 +122,30 @@ const getDevices = asyncHandler(async (req: any, res: any) => {
   });
 });
 
+/**
+ * @desc    Register FCM token for web push notifications
+ * @route   POST /api/notifications/fcm-token
+ * @access  Private
+ */
+const registerFCMToken = asyncHandler(async (req: any, res: any) => {
+  const { fcmToken } = req.body;
+  const userId = req.user.id;
+
+  if (!fcmToken) {
+    return res.status(400).json({
+      success: false,
+      message: "FCM token is required",
+    });
+  }
+
+  await notificationService.registerDeviceToken(userId, fcmToken, 'web');
+
+  res.status(200).json({
+    success: true,
+    message: "FCM token registered successfully",
+  });
+});
+
 module.exports = {
   getNotifications,
   getUnreadCount,
@@ -130,6 +154,7 @@ module.exports = {
   registerDevice,
   unregisterDevice,
   getDevices,
+  registerFCMToken,
 };
 
 export {};

@@ -1,10 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const notificationCenterController = require("../controllers/notificationCenterController");
+const notificationController = require("../controllers/notificationController");
 const { protect } = require("../middlewares/authMiddleware");
 
 // All routes require authentication
 router.use(protect);
+
+// POST /api/notifications/fcm-token - Register FCM token
+router.post("/fcm-token", notificationController.registerFCMToken);
 
 // GET /api/notifications - Get user notifications
 router.get("/", notificationCenterController.getNotifications);

@@ -6,6 +6,12 @@ let firebaseApp: admin.app.App | null = null;
  * Initialize Firebase Admin SDK
  */
 const initializeFirebase = (): admin.app.App => {
+  // Check if already initialized
+  if (admin.apps.length > 0) {
+    console.log("[Firebase] Admin SDK already initialized, reusing existing app");
+    return admin.apps[0];
+  }
+
   if (firebaseApp) {
     return firebaseApp;
   }

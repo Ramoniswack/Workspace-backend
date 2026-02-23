@@ -68,7 +68,29 @@ class PermissionService {
         return false;
       }
 
-      // Step 3: Check for list-level override (highest priority)
+      // Step 2.5: Check if user is admin (bypass list/folder/space overrides)
+      if (workspaceRole === WorkspaceRole.ADMIN) {
+        // Admins have full access, check workspace role permissions
+        const hasWorkspacePermission = roleHasPermission(workspaceRole, action);
+        
+        if (!hasWorkspacePermission) {
+          return false;
+        }
+
+        // Apply task-specific rules for admins too
+        if (this.isTaskAction(action) && context.resourceType === "task") {
+          return await this.checkTaskPermission(
+            userId,
+            action,
+            context,
+            workspaceRole
+          );
+        }
+
+        return true;
+      }
+
+      // Step 3: Check for list-level override (highest priority for non-admins)
       if (context.listId) {
         const listPermission = await this.getListPermissionLevel(
           userId,
@@ -154,16 +176,27 @@ class PermissionService {
           return true;
         }
         
-        // No space override - check if user is space member for space-related actions
-        // Members must be added to space to perform actions beyond viewing
-        if (this.isSpaceAction(action) && workspaceRole === WorkspaceRole.MEMBER) {
-          const isSpaceMember = await this.isSpaceMember(userId, context.spaceId);
-          if (!isSpaceMember) {
-            // Members not in space can only view
-            const viewActions: PermissionAction[] = ["VIEW_SPACE", "VIEW_FOLDER", "VIEW_LIST", "VIEW_TASK", "COMMENT_TASK"];
-            return viewActions.includes(action);
-          }
-        }
+// Only enforce space membership restriction
+// IF there is NO list override and NO folder override
+
+if (
+  !context.listId &&
+  !context.folderId &&
+  this.isSpaceAction(action) &&
+  workspaceRole === WorkspaceRole.MEMBER
+) {
+  const isSpaceMember = await this.isSpaceMember(userId, context.spaceId);
+  if (!isSpaceMember) {
+    const viewActions: PermissionAction[] = [
+      "VIEW_SPACE",
+      "VIEW_FOLDER",
+      "VIEW_LIST",
+      "VIEW_TASK",
+      "COMMENT_TASK",
+    ];
+    return viewActions.includes(action);
+  }
+}
       }
 
       // Step 6: No overrides - use workspace role

@@ -74,8 +74,9 @@ class ListService {
   async getSpaceLists(spaceId: string, userId: string) {
     console.log(`[ListService] getSpaceLists called with spaceId: ${spaceId}, userId: ${userId}`);
     
-    // Import ListMember model
+    // Import ListMember and Task models
     const ListMember = require("../models/ListMember").ListMember;
+    const Task = require("../models/Task");
     
     // Verify space exists
     const space = await Space.findOne({
@@ -122,14 +123,6 @@ class ListService {
 
     console.log(`[ListService] User ${userId} access check:`, { isOwner, isAdmin });
 
-    // Check if user is a space member
-    const isSpaceMember = space.members?.some((m: any) => {
-      const memberId = typeof m.user === 'string' ? m.user : m.user?._id?.toString();
-      return memberId === userId;
-    });
-
-    console.log(`[ListService] User ${userId} is space member:`, isSpaceMember);
-
     // Get all lists in the space
     const allLists = await List.find({
       space: spaceId,
@@ -142,29 +135,62 @@ class ListService {
     console.log(`[ListService] Found ${allLists.length} total lists`);
     console.log(`[ListService] All list IDs:`, allLists.map((l: any) => ({ id: l._id.toString(), name: l.name })));
 
-    // If user is owner, admin, or space member, return all lists
-    if (isOwner || isAdmin || isSpaceMember) {
-      console.log(`[ListService] User has full access, returning all ${allLists.length} lists`);
-      return allLists;
+    // Determine which lists to return
+    let listsToReturn;
+    
+    // Only owners and admins can see all lists
+    if (isOwner || isAdmin) {
+      console.log(`[ListService] User is owner/admin, returning all ${allLists.length} lists`);
+      listsToReturn = allLists;
+    } else {
+      // For regular members (including space members), filter to only lists where user is a list member
+      const userListMemberships = await ListMember.find({
+        user: userId,
+        space: spaceId
+      }).select('list').lean();
+
+      const accessibleListIds = userListMemberships.map((lm: any) => lm.list.toString());
+      console.log(`[ListService] User has access to ${accessibleListIds.length} lists via list membership`);
+      console.log(`[ListService] Accessible list IDs:`, accessibleListIds);
+
+      listsToReturn = allLists.filter((list: any) => 
+        accessibleListIds.includes(list._id.toString())
+      );
+
+      console.log(`[ListService] Returning ${listsToReturn.length} filtered lists`);
+      console.log(`[ListService] Filtered list names:`, listsToReturn.map((l: any) => l.name));
     }
 
-    // Otherwise, filter to only lists where user is a list member
-    const userListMemberships = await ListMember.find({
-      user: userId,
-      space: spaceId
-    }).select('list').lean();
-
-    const accessibleListIds = userListMemberships.map((lm: any) => lm.list.toString());
-    console.log(`[ListService] User has access to ${accessibleListIds.length} lists via list membership`);
-    console.log(`[ListService] Accessible list IDs:`, accessibleListIds);
-
-    const filteredLists = allLists.filter((list: any) => 
-      accessibleListIds.includes(list._id.toString())
+    // Add task counts and list members to each list
+    const listsWithCounts = await Promise.all(
+      listsToReturn.map(async (list: any) => {
+        const taskCount = await Task.countDocuments({ 
+          list: list._id, 
+          isDeleted: false 
+        });
+        const completedCount = await Task.countDocuments({ 
+          list: list._id, 
+          status: 'done',
+          isDeleted: false 
+        });
+        
+        // Get list members for this list
+        const listMembers = await ListMember.find({
+          list: list._id
+        }).select('user').lean();
+        
+        const memberIds = listMembers.map((lm: any) => lm.user.toString());
+        
+        return {
+          ...list,
+          taskCount,
+          completedCount,
+          members: memberIds // Add member IDs to the list
+        };
+      })
     );
 
-    console.log(`[ListService] Returning ${filteredLists.length} filtered lists`);
-    console.log(`[ListService] Filtered list names:`, filteredLists.map((l: any) => l.name));
-    return filteredLists;
+    return listsWithCounts;
   }
 
   async getListById(listId: string, userId: string) {

@@ -144,6 +144,68 @@ class WorkspaceService {
 
     return workspace;
   }
+
+  async getWorkspaceAnalytics(workspaceId: string, userId: string) {
+    const Space = require("../models/Space");
+    const List = require("../models/List");
+    const Task = require("../models/Task");
+
+    // Verify workspace access
+    const workspace = await Workspace.findOne({
+      _id: workspaceId,
+      isDeleted: false
+    })
+      .populate("owner", "name email")
+      .populate("members.user", "name email");
+
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404);
+    }
+
+    const hasAccess =
+      workspace.owner._id.toString() === userId ||
+      workspace.members.some((member: any) => member.user._id.toString() === userId);
+
+    if (!hasAccess) {
+      throw new AppError("You do not have access to this workspace", 403);
+    }
+
+    // Fetch all spaces
+    const spaces = await Space.find({
+      workspace: workspaceId,
+      isDeleted: false
+    })
+      .select("_id name color status")
+      .lean();
+
+    const spaceIds = spaces.map((s: any) => s._id);
+
+    // Fetch all lists
+    const lists = await List.find({
+      space: { $in: spaceIds },
+      isDeleted: false
+    })
+      .select("_id space")
+      .lean();
+
+    const listIds = lists.map((l: any) => l._id);
+
+    // Fetch all tasks in one query
+    const tasks = await Task.find({
+      list: { $in: listIds },
+      isDeleted: false
+    })
+      .select("_id name status priority assignee space list workspace createdAt updatedAt")
+      .populate("assignee", "name email")
+      .lean();
+
+    return {
+      workspace,
+      spaces,
+      tasks,
+      members: workspace.members
+    };
+  }
 }
 
 module.exports = new WorkspaceService();

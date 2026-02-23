@@ -247,11 +247,62 @@ const inviteMember = asyncHandler(
   }
 );
 
+/**
+ * @desc    Update current user's status (clock in/out)
+ * @route   PATCH /api/workspaces/:workspaceId/members/me/status
+ * @access  Private (Member)
+ */
+const updateMyStatus = asyncHandler(
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { workspaceId } = req.params;
+    const { status } = req.body;
+    const currentUserId = req.user!.id;
+
+    // Validate status
+    const validStatuses = ["active", "inactive"];
+    if (!status || !validStatuses.includes(status)) {
+      return next(
+        new AppError(
+          `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+          400
+        )
+      );
+    }
+
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) {
+      return next(new AppError("Workspace not found", 404));
+    }
+
+    // Find the current user's member record
+    const memberIndex = workspace.members.findIndex(
+      (m: any) => m.user.toString() === currentUserId
+    );
+
+    if (memberIndex === -1) {
+      return next(new AppError("You are not a member of this workspace", 404));
+    }
+
+    // Update the status
+    workspace.members[memberIndex].status = status;
+    await workspace.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully ${status === 'active' ? 'clocked in' : 'clocked out'}`,
+      data: {
+        status: status,
+      },
+    });
+  }
+);
+
 module.exports = {
   getWorkspaceMembers,
   updateMemberRole,
   removeMember,
   inviteMember,
+  updateMyStatus,
 };
 
 export {};

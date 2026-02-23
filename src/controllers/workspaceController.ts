@@ -81,12 +81,25 @@ const deleteWorkspace = asyncHandler(async (req: AuthRequest, res: Response, nex
   });
 });
 
+// @desc    Get workspace analytics data
+// @route   GET /api/workspaces/:id/analytics
+// @access  Private
+const getWorkspaceAnalytics = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const analytics = await workspaceService.getWorkspaceAnalytics(req.params.id, req.user!.id);
+
+  res.status(200).json({
+    success: true,
+    data: analytics
+  });
+});
+
 module.exports = {
   createWorkspace,
   getMyWorkspaces,
   getWorkspace,
   updateWorkspace,
-  deleteWorkspace
+  deleteWorkspace,
+  getWorkspaceAnalytics
 };
 
 export {};

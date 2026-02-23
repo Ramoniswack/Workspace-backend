@@ -9,13 +9,14 @@ const AppError = require("../utils/AppError");
 // @route   POST /api/spaces/:spaceId/lists
 // @access  Private
 const createList = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const { name } = req.body;
+  const { name, folderId } = req.body;
   const { spaceId } = req.params;
 
   const list = await listService.createList({
     name,
     space: spaceId,
-    createdBy: req.user!.id
+    createdBy: req.user!.id,
+    folderId: folderId || undefined
   });
 
   res.status(201).json({
