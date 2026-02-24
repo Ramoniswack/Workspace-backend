@@ -466,16 +466,36 @@ class ActivityService {
   }) {
     const { userId, workspaceId, spaceId, listId, limit = 50, skip = 0 } = params;
 
-    // Build query
+    // If listId is provided, get all tasks in that list first
+    if (listId) {
+      const Task = require("../models/Task");
+      const tasks = await Task.find({ list: listId, isDeleted: false }).select('_id');
+      const taskIds = tasks.map((t: any) => t._id);
+      
+      // Get activities for these tasks
+      const activities = await Activity.find({
+        task: { $in: taskIds },
+        isDeleted: false,
+      })
+        .populate("user", "name email avatar")
+        .populate("task", "title status")
+        .sort("-createdAt")
+        .limit(limit)
+        .skip(skip)
+        .lean();
+
+      return activities;
+    }
+
+    // Build query for other filters
     const query: any = { isDeleted: false };
 
-    if (workspaceId) query.workspaceId = workspaceId;
-    if (spaceId) query.spaceId = spaceId;
-    if (listId) query.listId = listId;
+    if (workspaceId) query.workspace = workspaceId;
 
     // Get activities
     const activities = await Activity.find(query)
-      .populate("userId", "name email avatar")
+      .populate("user", "name email avatar")
+      .populate("task", "title status")
       .sort("-createdAt")
       .limit(limit)
       .skip(skip)

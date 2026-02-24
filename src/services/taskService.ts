@@ -148,6 +148,24 @@ class TaskService {
       metadata: { title: task.title, listId, spaceId: list.space }
     });
 
+    // Create activity entry for task creation
+    try {
+      const Activity = require("../models/Activity");
+      await Activity.create({
+        task: task._id,
+        user: createdBy,
+        workspace: list.workspace,
+        type: "update",
+        fieldChanged: "title",
+        oldValue: null,
+        newValue: task.title,
+        isSystemGenerated: false,
+      });
+    } catch (error) {
+      console.error("[Task] Failed to create activity for task creation:", error);
+      // Don't fail task creation if activity logging fails
+    }
+
     // Emit real-time event to space
     try {
       emitSpaceEvent(

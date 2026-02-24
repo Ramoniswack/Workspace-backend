@@ -3,10 +3,10 @@ import { Document, Schema } from "mongoose";
 const mongoose = require("mongoose");
 
 export interface ITimeEntry extends Document {
-  task: Schema.Types.ObjectId;
+  task?: Schema.Types.ObjectId;
   user: Schema.Types.ObjectId;
   workspace: Schema.Types.ObjectId;
-  project: Schema.Types.ObjectId;
+  project?: Schema.Types.ObjectId;
   startTime: Date;
   endTime?: Date;
   duration?: number; // in seconds
@@ -23,7 +23,7 @@ const timeEntrySchema = new mongoose.Schema(
     task: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Task",
-      required: [true, "Please provide task"]
+      required: false
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -38,7 +38,7 @@ const timeEntrySchema = new mongoose.Schema(
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Space",
-      required: true
+      required: false
     },
     startTime: {
       type: Date,

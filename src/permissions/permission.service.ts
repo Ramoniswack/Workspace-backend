@@ -98,24 +98,8 @@ class PermissionService {
         );
 
         if (listPermission) {
-          // List override exists - use it
-          const hasListPermission = listPermissionHasAction(listPermission, action);
-          
-          if (!hasListPermission) {
-            return false;
-          }
-
-          // Apply task-specific rules even with list override
-          if (this.isTaskAction(action) && context.resourceType === "task") {
-            return await this.checkTaskPermission(
-              userId,
-              action,
-              context,
-              workspaceRole
-            );
-          }
-
-          return true;
+          // List override exists - use it (no additional task checks needed)
+          return listPermissionHasAction(listPermission, action);
         }
       }
 
@@ -127,24 +111,8 @@ class PermissionService {
         );
 
         if (folderPermission) {
-          // Folder override exists - use it
-          const hasFolderPermission = folderPermissionHasAction(folderPermission, action);
-          
-          if (!hasFolderPermission) {
-            return false;
-          }
-
-          // Apply task-specific rules even with folder override
-          if (this.isTaskAction(action) && context.resourceType === "task") {
-            return await this.checkTaskPermission(
-              userId,
-              action,
-              context,
-              workspaceRole
-            );
-          }
-
-          return true;
+          // Folder override exists - use it (no additional task checks needed)
+          return folderPermissionHasAction(folderPermission, action);
         }
       }
 
@@ -156,64 +124,46 @@ class PermissionService {
         );
 
         if (spacePermission) {
-          // Space override exists - use it
-          const hasSpacePermission = spacePermissionHasAction(spacePermission, action);
-          
-          if (!hasSpacePermission) {
-            return false;
-          }
-
-          // Apply task-specific rules even with space override
-          if (this.isTaskAction(action) && context.resourceType === "task") {
-            return await this.checkTaskPermission(
-              userId,
-              action,
-              context,
-              workspaceRole
-            );
-          }
-
-          return true;
+          // Space override exists - use it (no additional task checks needed)
+          return spacePermissionHasAction(spacePermission, action);
         }
         
-// Only enforce space membership restriction
-// IF there is NO list override and NO folder override
-
-if (
-  !context.listId &&
-  !context.folderId &&
-  this.isSpaceAction(action) &&
-  workspaceRole === WorkspaceRole.MEMBER
-) {
-  const isSpaceMember = await this.isSpaceMember(userId, context.spaceId);
-  if (!isSpaceMember) {
-    const viewActions: PermissionAction[] = [
-      "VIEW_SPACE",
-      "VIEW_FOLDER",
-      "VIEW_LIST",
-      "VIEW_TASK",
-      "COMMENT_TASK",
-    ];
-    return viewActions.includes(action);
-  }
-}
+        // Only enforce space membership restriction
+        // IF there is NO list override and NO folder override
+        if (
+          !context.listId &&
+          !context.folderId &&
+          this.isSpaceAction(action) &&
+          workspaceRole === WorkspaceRole.MEMBER
+        ) {
+          const isSpaceMember = await this.isSpaceMember(userId, context.spaceId);
+          if (!isSpaceMember) {
+            const viewActions: PermissionAction[] = [
+              "VIEW_SPACE",
+              "VIEW_FOLDER",
+              "VIEW_LIST",
+              "VIEW_TASK",
+              "COMMENT_TASK",
+            ];
+            return viewActions.includes(action);
+          }
+        }
       }
 
       // Step 6: No overrides - use workspace role
       const hasWorkspacePermission = roleHasPermission(workspaceRole, action);
       
       if (!hasWorkspacePermission) {
+        // Step 7: Apply task-specific rules (assignee check as fallback)
+        if (this.isTaskAction(action) && context.resourceType === "task") {
+          return await this.checkTaskPermission(
+            userId,
+            action,
+            context,
+            workspaceRole
+          );
+        }
         return false;
-      }
-
-      // Step 7: Apply task-specific rules
-      if (this.isTaskAction(action) && context.resourceType === "task") {
-        return await this.checkTaskPermission(
-          userId,
-          action,
-          context,
-          workspaceRole
-        );
       }
 
       return true;
@@ -387,7 +337,7 @@ if (
 
   /**
    * Check task-specific permissions
-   * Members can edit/change status of tasks they're assigned to
+   * Members can edit/change status of tasks they're assigned to OR if they have proper permissions
    */
   async checkTaskPermission(
     userId: string,
@@ -400,7 +350,7 @@ if (
       return true;
     }
 
-    // For EDIT_TASK and CHANGE_STATUS, check if user is assignee
+    // For EDIT_TASK and CHANGE_STATUS, check if user has list/folder/space permissions OR is assignee
     if (action === "EDIT_TASK" || action === "CHANGE_STATUS") {
       if (!context.resourceId) {
         return false;
@@ -414,6 +364,12 @@ if (
 
       // Allow if user is the assignee
       if (task.assignee && task.assignee.toString() === userId) {
+        return true;
+      }
+
+      // If user has list/folder/space override permissions, they already passed the permission check
+      // So if we got here with list/folder/space context, they have permission
+      if (context.listId || context.folderId || context.spaceId) {
         return true;
       }
 

@@ -16,12 +16,12 @@ class WorkspaceService {
       members: [
         {
           user: data.owner,
-          role: "owner"
+          role: "owner",
+          status: "inactive" // Initialize status
         }
       ]
     });
 
-    // Log activity
     await logger.logActivity({
       userId: data.owner,
       workspaceId: workspace._id.toString(),
@@ -39,8 +39,8 @@ class WorkspaceService {
       isDeleted: false,
       $or: [{ owner: userId }, { "members.user": userId }]
     })
-      .populate("owner", "name email")
-      .populate("members.user", "name email")
+      .populate("owner", "name email avatar")
+      .populate("members.user", "name email avatar")
       .sort("-createdAt");
 
     return workspaces;
@@ -51,14 +51,13 @@ class WorkspaceService {
       _id: workspaceId,
       isDeleted: false
     })
-      .populate("owner", "name email")
-      .populate("members.user", "name email");
+      .populate("owner", "name email avatar")
+      .populate("members.user", "name email avatar");
 
     if (!workspace) {
       throw new AppError("Workspace not found", 404);
     }
 
-    // Check if user has access
     const hasAccess =
       workspace.owner._id.toString() === userId ||
       workspace.members.some((member: any) => member.user._id.toString() === userId);
@@ -80,14 +79,12 @@ class WorkspaceService {
       throw new AppError("Workspace not found", 404);
     }
 
-    // Only owner can delete
     if (workspace.owner.toString() !== userId) {
       throw new AppError("Only workspace owner can delete this workspace", 403);
     }
 
     await softDelete(Workspace, workspaceId);
 
-    // Log activity
     await logger.logActivity({
       userId,
       workspaceId: workspace._id.toString(),
@@ -109,12 +106,10 @@ class WorkspaceService {
       throw new AppError("Workspace not found", 404);
     }
 
-    // Only owner can update
     if (workspace.owner.toString() !== userId) {
       throw new AppError("Only workspace owner can update this workspace", 403);
     }
 
-    // Capture old state for audit
     const oldValue = workspace.toObject();
 
     if (updateData.name) {
@@ -123,7 +118,6 @@ class WorkspaceService {
 
     await workspace.save();
 
-    // Log audit
     await logger.logAudit({
       userId,
       workspaceId: workspace._id.toString(),
@@ -133,7 +127,6 @@ class WorkspaceService {
       newValue: workspace.toObject()
     });
 
-    // Log activity
     await logger.logActivity({
       userId,
       workspaceId: workspace._id.toString(),
@@ -146,22 +139,26 @@ class WorkspaceService {
   }
 
   async getWorkspaceAnalytics(workspaceId: string, userId: string) {
+    // Dynamic requires to prevent circular dependencies
     const Space = require("../models/Space");
     const List = require("../models/List");
     const Task = require("../models/Task");
+    const TimeEntry = require("../models/TimeEntry");
 
-    // Verify workspace access
+    // 1. Fetch Workspace & Members (populated for UI badges/avatars)
     const workspace = await Workspace.findOne({
       _id: workspaceId,
       isDeleted: false
     })
-      .populate("owner", "name email")
-      .populate("members.user", "name email");
+      .populate("owner", "name email avatar")
+      .populate("members.user", "name email avatar")
+      .lean();
 
     if (!workspace) {
       throw new AppError("Workspace not found", 404);
     }
 
+    // 2. Security Check
     const hasAccess =
       workspace.owner._id.toString() === userId ||
       workspace.members.some((member: any) => member.user._id.toString() === userId);
@@ -170,40 +167,42 @@ class WorkspaceService {
       throw new AppError("You do not have access to this workspace", 403);
     }
 
-    // Fetch all spaces
-    const spaces = await Space.find({
-      workspace: workspaceId,
-      isDeleted: false
-    })
+    // 3. Fetch Data Tree (Spaces -> Lists -> Tasks)
+    const spaces = await Space.find({ workspace: workspaceId, isDeleted: false })
       .select("_id name color status")
       .lean();
 
     const spaceIds = spaces.map((s: any) => s._id);
 
-    // Fetch all lists
-    const lists = await List.find({
-      space: { $in: spaceIds },
-      isDeleted: false
-    })
+    const lists = await List.find({ space: { $in: spaceIds }, isDeleted: false })
       .select("_id space")
       .lean();
 
     const listIds = lists.map((l: any) => l._id);
 
-    // Fetch all tasks in one query
-    const tasks = await Task.find({
-      list: { $in: listIds },
+    const tasks = await Task.find({ list: { $in: listIds }, isDeleted: false })
+      .select("_id name status priority assignee space list workspace createdAt updatedAt")
+      .populate("assignee", "name email avatar")
+      .lean();
+
+    // 4. Fetch the specific running timer for the current user
+    // This allows the frontend to calculate the "ticking" seconds on refresh
+    const currentRunningTimer = await TimeEntry.findOne({
+      user: userId,
+      workspace: workspaceId,
+      isRunning: true,
       isDeleted: false
     })
-      .select("_id name status priority assignee space list workspace createdAt updatedAt")
-      .populate("assignee", "name email")
+      .select("_id startTime isRunning description")
+      .sort("-startTime") // Get the most recent one if duplicates exist
       .lean();
 
     return {
       workspace,
       spaces,
       tasks,
-      members: workspace.members
+      members: workspace.members,
+      currentRunningTimer // Crucial for persistence
     };
   }
 }
