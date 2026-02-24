@@ -131,11 +131,33 @@ class FolderService {
       isDeleted: false
     }).sort("createdAt").lean();
 
-    // Get all lists in the space
-    const allLists = await List.find({
+    // Get all lists in the space WITH task counts
+    const Task = require("../models/Task");
+    const allListsRaw = await List.find({
       space: spaceId,
       isDeleted: false
     }).lean();
+    
+    // Add task counts to each list
+    const allLists = await Promise.all(
+      allListsRaw.map(async (list: any) => {
+        const taskCount = await Task.countDocuments({ 
+          list: list._id, 
+          isDeleted: false 
+        });
+        const completedCount = await Task.countDocuments({ 
+          list: list._id, 
+          status: 'done',
+          isDeleted: false 
+        });
+        
+        return {
+          ...list,
+          taskCount,
+          completedCount
+        };
+      })
+    );
 
     // Determine which lists user can access
     let accessibleListIds: string[];
