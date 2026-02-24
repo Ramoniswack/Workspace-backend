@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Invitation = require("../models/Invitation");
 const Workspace = require("../models/Workspace");
+const WorkspaceActivity = require("../models/WorkspaceActivity");
 const User = require("../models/User");
 const AppError = require("../utils/AppError");
 const logger = require("../utils/logger");
@@ -245,6 +246,16 @@ class InvitationService {
         role: invitation.role,
         invitationId: invitation._id
       }
+    });
+
+    // Create workspace activity
+    await WorkspaceActivity.createActivity({
+      workspace: workspace._id.toString(),
+      user: userId,
+      type: "member_joined",
+      description: `joined the workspace`,
+      targetUser: userId,
+      metadata: { role: invitation.role }
     });
 
     // Send push notification to workspace owner (non-blocking)

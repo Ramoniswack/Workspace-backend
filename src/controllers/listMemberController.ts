@@ -5,6 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { ListMember, ListPermissionLevel } = require("../models/ListMember");
 const List = require("../models/List");
 const Workspace = require("../models/Workspace");
+const WorkspaceActivity = require("../models/WorkspaceActivity");
 const User = require("../models/User");
 const AppError = require("../utils/AppError");
 
@@ -158,24 +159,23 @@ const addListMember = asyncHandler(
       list: listId,
     });
 
+    const isNewMember = !listMember;
+    let spaceId: string;
+
     if (listMember) {
       // Update existing override
       listMember.permissionLevel = permissionLevel;
       listMember.addedBy = currentUserId;
       await listMember.save();
+      
+      spaceId = typeof list.space === 'object' ? list.space._id : list.space;
     } else {
       // Create new override - ensure all required fields are present
-      const spaceId = typeof list.space === 'object' ? list.space._id : list.space;
-      const workspaceId = typeof list.workspace === 'object' ? list.workspace._id : list.workspace;
+      spaceId = typeof list.space === 'object' ? list.space._id : list.space;
       
       if (!spaceId) {
         console.error('[addListMember] Missing space ID:', { list });
         return next(new AppError("List is missing space reference", 500));
-      }
-      
-      if (!workspaceId) {
-        console.error('[addListMember] Missing workspace ID:', { list });
-        return next(new AppError("List is missing workspace reference", 500));
       }
       
       const createData = {
@@ -205,6 +205,24 @@ const addListMember = asyncHandler(
 
     // Populate user info
     await listMember.populate("user", "name email avatar");
+
+    // Create workspace activity for new member addition
+    if (isNewMember) {
+      try {
+        await WorkspaceActivity.createActivity({
+          workspace: workspaceId.toString(),
+          user: currentUserId,
+          type: "list_member_added",
+          description: `added ${listMember.user.name} to list "${list.name}"`,
+          space: spaceId,
+          list: listId,
+          targetUser: userId,
+          metadata: { permissionLevel }
+        });
+      } catch (error) {
+        console.error('[addListMember] Failed to create workspace activity:', error);
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -281,16 +299,43 @@ const updateListMember = asyncHandler(
 const removeListMember = asyncHandler(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { listId, userId } = req.params;
+    const currentUserId = req.user!.id;
 
-    const listMember = await ListMember.findOneAndDelete({
+    const listMember = await ListMember.findOne({
       user: userId,
       list: listId,
-    });
+    }).populate("user", "name");
 
     if (!listMember) {
       return next(
         new AppError("List member override not found", 404)
       );
+    }
+
+    // Get list and workspace info for activity
+    const list = await List.findById(listId);
+    const userName = (listMember.user as any)?.name || 'a member';
+
+    await ListMember.findOneAndDelete({
+      user: userId,
+      list: listId,
+    });
+
+    // Create workspace activity
+    if (list) {
+      try {
+        await WorkspaceActivity.createActivity({
+          workspace: list.workspace.toString(),
+          user: currentUserId,
+          type: "list_member_removed",
+          description: `removed ${userName} from list "${list.name}"`,
+          space: list.space.toString(),
+          list: listId,
+          targetUser: userId
+        });
+      } catch (error) {
+        console.error('[removeListMember] Failed to create workspace activity:', error);
+      }
     }
 
     res.status(200).json({

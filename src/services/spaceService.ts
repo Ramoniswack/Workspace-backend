@@ -1,5 +1,6 @@
 const Space = require("../models/Space");
 const Workspace = require("../models/Workspace");
+const WorkspaceActivity = require("../models/WorkspaceActivity");
 const AppError = require("../utils/AppError");
 const softDelete = require("../utils/softDelete");
 const logger = require("../utils/logger");
@@ -62,6 +63,16 @@ class SpaceService {
       resourceType: "Space",
       resourceId: space._id.toString(),
       metadata: { name: space.name }
+    });
+
+    // Create workspace activity
+    await WorkspaceActivity.createActivity({
+      workspace,
+      user: owner,
+      type: "space_created",
+      description: `created space "${space.name}"`,
+      space: space._id.toString(),
+      metadata: { spaceName: space.name }
     });
 
     return space;
@@ -280,6 +291,18 @@ class SpaceService {
       resourceId: space._id.toString()
     });
 
+    // Create workspace activity for name change
+    if (updateData.name && oldValue.name !== updateData.name) {
+      await WorkspaceActivity.createActivity({
+        workspace: space.workspace.toString(),
+        user: userId,
+        type: "space_updated",
+        description: `renamed space from "${oldValue.name}" to "${updateData.name}"`,
+        space: space._id.toString(),
+        metadata: { oldName: oldValue.name, newName: updateData.name }
+      });
+    }
+
     return space;
   }
 
@@ -311,6 +334,15 @@ class SpaceService {
       action: "DELETE",
       resourceType: "Space",
       resourceId: space._id.toString()
+    });
+
+    // Create workspace activity
+    await WorkspaceActivity.createActivity({
+      workspace: space.workspace.toString(),
+      user: userId,
+      type: "space_deleted",
+      description: `deleted space "${space.name}"`,
+      metadata: { spaceName: space.name }
     });
 
     return { message: "Space deleted successfully" };
@@ -373,6 +405,19 @@ class SpaceService {
       metadata: { memberId, role }
     });
 
+    // Create workspace activity
+    const User = require("../models/User");
+    const targetUser = await User.findById(memberId).select('name');
+    await WorkspaceActivity.createActivity({
+      workspace: space.workspace.toString(),
+      user: userId,
+      type: "space_member_added",
+      description: `added ${targetUser?.name || 'a member'} to space "${space.name}"`,
+      space: space._id.toString(),
+      targetUser: memberId,
+      metadata: { role }
+    });
+
     return space;
   }
 
@@ -426,6 +471,18 @@ class SpaceService {
       resourceType: "Space",
       resourceId: space._id.toString(),
       metadata: { memberId }
+    });
+
+    // Create workspace activity
+    const User = require("../models/User");
+    const targetUser = await User.findById(memberId).select('name');
+    await WorkspaceActivity.createActivity({
+      workspace: space.workspace.toString(),
+      user: userId,
+      type: "space_member_removed",
+      description: `removed ${targetUser?.name || 'a member'} from space "${space.name}"`,
+      space: space._id.toString(),
+      targetUser: memberId
     });
 
     return space;

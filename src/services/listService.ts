@@ -1,5 +1,6 @@
 const List = require("../models/List");
 const Space = require("../models/Space");
+const WorkspaceActivity = require("../models/WorkspaceActivity");
 const AppError = require("../utils/AppError");
 const softDelete = require("../utils/softDelete");
 const logger = require("../utils/logger");
@@ -66,6 +67,17 @@ class ListService {
       resourceType: "List",
       resourceId: list._id.toString(),
       metadata: { name: list.name, spaceId, folderId }
+    });
+
+    // Create workspace activity
+    await WorkspaceActivity.createActivity({
+      workspace: space.workspace.toString(),
+      user: createdBy,
+      type: "list_created",
+      description: `created list "${list.name}" in space "${space.name}"`,
+      space: spaceId,
+      list: list._id.toString(),
+      metadata: { listName: list.name, spaceName: space.name }
     });
 
     return list;
@@ -282,6 +294,19 @@ class ListService {
       resourceId: list._id.toString()
     });
 
+    // Create workspace activity for name change
+    if (updateData.name && oldValue.name !== updateData.name) {
+      await WorkspaceActivity.createActivity({
+        workspace: list.workspace.toString(),
+        user: userId,
+        type: "list_updated",
+        description: `renamed list from "${oldValue.name}" to "${updateData.name}"`,
+        space: list.space.toString(),
+        list: list._id.toString(),
+        metadata: { oldName: oldValue.name, newName: updateData.name }
+      });
+    }
+
     return list;
   }
 
@@ -322,6 +347,16 @@ class ListService {
       action: "DELETE",
       resourceType: "List",
       resourceId: list._id.toString()
+    });
+
+    // Create workspace activity
+    await WorkspaceActivity.createActivity({
+      workspace: list.workspace.toString(),
+      user: userId,
+      type: "list_deleted",
+      description: `deleted list "${list.name}"`,
+      space: list.space.toString(),
+      metadata: { listName: list.name }
     });
 
     return { message: "List deleted successfully" };
