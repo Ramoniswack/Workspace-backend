@@ -9,14 +9,18 @@ const AppError = require("../utils/AppError");
 // @route   POST /api/lists/:listId/tasks
 // @access  Private
 const createTask = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const { title, description, priority, dueDate, assignee } = req.body;
+  const { title, description, priority, dueDate, deadline, assignee } = req.body;
   const { listId } = req.params;
+
+  console.log('[TaskController] Request body:', req.body);
+  console.log('[TaskController] Extracted deadline:', deadline);
 
   const task = await taskService.createTask({
     title,
     description,
     priority,
     dueDate,
+    deadline,
     list: listId,
     assignee,
     createdBy: req.user!.id
@@ -64,7 +68,7 @@ const getTask = asyncHandler(async (req: AuthRequest, res: Response, next: NextF
 // @route   PATCH /api/tasks/:id
 // @access  Private
 const updateTask = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const { title, description, status, priority, dueDate, assignee } = req.body;
+  const { title, description, status, priority, dueDate, deadline, assignee } = req.body;
 
   const task = await taskService.updateTask(req.params.id, req.user!.id, {
     title,
@@ -72,6 +76,7 @@ const updateTask = asyncHandler(async (req: AuthRequest, res: Response, next: Ne
     status,
     priority,
     dueDate,
+    deadline,
     assignee
   });
 

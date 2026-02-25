@@ -9,6 +9,7 @@ export interface ITask extends Document {
   priority?: "low" | "medium" | "high" | "urgent";
   startDate?: Date;
   dueDate?: Date;
+  deadline?: Date; // Task deadline for performance tracking
   isMilestone: boolean;
   list: Schema.Types.ObjectId;
   space: Schema.Types.ObjectId; // Denormalized for performance
@@ -48,6 +49,7 @@ export interface ITask extends Document {
   recurrenceEnd?: Date;
   recurringTaskId?: Schema.Types.ObjectId; // Reference to original recurring task
   completedAt?: Date; // Timestamp when task was marked as done
+  completedBy?: Schema.Types.ObjectId; // User who completed the task
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -80,6 +82,9 @@ const taskSchema = new mongoose.Schema(
       type: Date
     },
     dueDate: {
+      type: Date
+    },
+    deadline: {
       type: Date
     },
     isMilestone: {
@@ -205,6 +210,10 @@ const taskSchema = new mongoose.Schema(
     completedAt: {
       type: Date
     },
+    completedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
     isDeleted: {
       type: Boolean,
       default: false
@@ -236,6 +245,8 @@ taskSchema.index({ recurringTaskId: 1 });
 taskSchema.index({ workspace: 1, status: 1, updatedAt: 1 }); // For velocity queries
 taskSchema.index({ workspace: 1, status: 1, completedAt: 1 }); // For completion tracking
 taskSchema.index({ workspace: 1, assignee: 1, status: 1 }); // For team workload
+taskSchema.index({ workspace: 1, completedBy: 1, status: 1 }); // For performance tracking
+taskSchema.index({ completedBy: 1, completedAt: 1, deadline: 1 }); // For deadline success rate
 taskSchema.index({ updatedAt: 1 }); // For time-based queries
 taskSchema.index({ completedAt: 1 }); // For completion time analysis
 taskSchema.index({ createdAt: 1, updatedAt: 1 }); // For lead time calculation

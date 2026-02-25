@@ -19,6 +19,7 @@ interface CreateTaskData {
   priority?: "low" | "medium" | "high";
   startDate?: Date;
   dueDate?: Date;
+  deadline?: Date;
   isMilestone?: boolean;
   list: string;
   assignee?: string;
@@ -39,6 +40,7 @@ interface UpdateTaskData {
   priority?: "low" | "medium" | "high" | "urgent";
   startDate?: Date;
   dueDate?: Date;
+  deadline?: Date;
   assignee?: string;
   assigneeId?: string;
   isMilestone?: boolean;
@@ -116,6 +118,7 @@ class TaskService {
       priority,
       startDate: data.startDate,
       dueDate,
+      deadline: data.deadline,
       isMilestone: data.isMilestone || false,
       list: listId,
       space: list.space,
@@ -137,6 +140,12 @@ class TaskService {
     }
 
     const task = await Task.create(taskData);
+
+    console.log('[TaskService] Task created with deadline:', {
+      taskId: task._id,
+      deadline: task.deadline,
+      hasDeadline: !!task.deadline
+    });
 
     // Log activity
     await logger.logActivity({
@@ -343,24 +352,8 @@ class TaskService {
       throw new AppError("Task not found", 404);
     }
 
-    // Verify user can edit (creator, assignee, or space admin)
-    const space = await Space.findOne({
-      _id: task.space,
-      isDeleted: false
-    });
-
-    if (!space) {
-      throw new AppError("Space not found", 404);
-    }
-
-    const isCreator = task.createdBy.toString() === userId;
-    const isAssignee = task.assignee && task.assignee.toString() === userId;
-    const member = space.members.find((m: any) => m.user.toString() === userId);
-    const isSpaceAdmin = member && (member.role === "owner" || member.role === "admin");
-
-    if (!isCreator && !isAssignee && !isSpaceAdmin) {
-      throw new AppError("You do not have permission to edit this task", 403);
-    }
+    // Permission check is handled by middleware (requirePermission("EDIT_TASK"))
+    // No need for additional checks here
 
     // Check dependency blocking if status is changing
     if (updateData.status && updateData.status !== task.status) {
@@ -396,18 +389,21 @@ class TaskService {
       const oldStatus = task.status;
       task.status = updateData.status;
       
-      // Handle completedAt field
+      // Handle completedAt and completedBy fields
       if (updateData.status === "done" && oldStatus !== "done") {
-        // Task is being marked as done
+        // Task was just completed
         task.completedAt = new Date();
+        task.completedBy = userId;
       } else if (updateData.status !== "done" && oldStatus === "done") {
-        // Task is being reopened
+        // Task was moved back from Done
         task.completedAt = undefined;
+        task.completedBy = undefined;
       }
     }
     if (updateData.priority) task.priority = updateData.priority;
     if (updateData.startDate !== undefined) task.startDate = updateData.startDate;
     if (updateData.dueDate !== undefined) task.dueDate = updateData.dueDate;
+    if (updateData.deadline !== undefined) task.deadline = updateData.deadline;
     // Handle both assignee and assigneeId (assigneeId is an alias)
     if (updateData.assignee !== undefined) task.assignee = updateData.assignee;
     if (updateData.assigneeId !== undefined) task.assignee = updateData.assigneeId;
@@ -616,23 +612,8 @@ class TaskService {
       throw new AppError("Task not found", 404);
     }
 
-    // Verify user can delete (creator or space admin)
-    const space = await Space.findOne({
-      _id: task.space,
-      isDeleted: false
-    });
-
-    if (!space) {
-      throw new AppError("Space not found", 404);
-    }
-
-    const isCreator = task.createdBy.toString() === userId;
-    const member = space.members.find((m: any) => m.user.toString() === userId);
-    const isSpaceAdmin = member && (member.role === "owner" || member.role === "admin");
-
-    if (!isCreator && !isSpaceAdmin) {
-      throw new AppError("You do not have permission to delete this task", 403);
-    }
+    // Permission check is handled by middleware (requirePermission("DELETE_TASK"))
+    // No need for additional checks here
 
     await softDelete(Task, taskId);
 

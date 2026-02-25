@@ -22,7 +22,14 @@ const Folder = require("../models/Folder");
 const requirePermission = (action: PermissionAction) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      console.log('\n🚀 MIDDLEWARE: requirePermission called');
+      console.log('  ➜ Action:', action);
+      console.log('  ➜ Method:', req.method);
+      console.log('  ➜ Path:', req.path);
+      console.log('  ➜ BaseURL:', req.baseUrl);
+      
       const userId = req.user?.id;
+      console.log('  ➜ User ID:', userId);
 
       if (!userId) {
         return next(new AppError("Authentication required", 401));
@@ -30,6 +37,7 @@ const requirePermission = (action: PermissionAction) => {
 
       // Get workspace ID from request
       const workspaceId = await getWorkspaceId(req);
+      console.log('  ➜ Workspace ID:', workspaceId);
 
       if (!workspaceId) {
         return next(new AppError("Workspace context not found", 400));
@@ -45,11 +53,16 @@ const requirePermission = (action: PermissionAction) => {
         resourceId: getResourceId(req),
         resourceType: getResourceType(req),
       };
+      
+      console.log('  ➜ Context built:', JSON.stringify(context, null, 2));
 
       // Check permission
       const hasPermission = await PermissionService.can(userId, action, context);
+      
+      console.log('  ➜ Permission result:', hasPermission);
 
       if (!hasPermission) {
+        console.log('  ❌ Permission denied, returning 403');
         return next(
           new AppError(
             `You do not have permission to perform this action: ${action}`,
@@ -57,6 +70,8 @@ const requirePermission = (action: PermissionAction) => {
           )
         );
       }
+      
+      console.log('  ✅ Permission granted, continuing...\n');
 
       // Attach context to request for use in controllers
       (req as any).permissionContext = context;

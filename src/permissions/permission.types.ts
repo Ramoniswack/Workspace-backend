@@ -7,10 +7,10 @@
  * Workspace roles in hierarchical order
  */
 export enum WorkspaceRole {
-  OWNER = "OWNER",
-  ADMIN = "ADMIN",
-  MEMBER = "MEMBER",
-  GUEST = "GUEST"
+  OWNER = "owner",
+  ADMIN = "admin",
+  MEMBER = "member",
+  GUEST = "guest"
 }
 
 /**

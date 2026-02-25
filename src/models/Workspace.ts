@@ -13,6 +13,7 @@ export enum WorkspaceRole {
 export interface IWorkspaceMember {
   user: Schema.Types.ObjectId;
   role: WorkspaceRole | "owner" | "admin" | "member" | "guest";
+  status?: "active" | "inactive";
 }
 
 export interface IWorkspace extends Document {
@@ -49,6 +50,11 @@ const workspaceSchema = new mongoose.Schema(
           type: String,
           enum: ["owner", "admin", "member", "guest"],
           default: "member"
+        },
+        status: {
+          type: String,
+          enum: ["active", "inactive"],
+          default: "inactive"
         }
       }
     ],

@@ -77,6 +77,7 @@ const startServer = async () => {
     const timeTrackingRoutes = require("./routes/timeTrackingRoutes");
     const memberRoutes = require("./routes/memberRoutes");
     const documentRoutes = require("./routes/documentRoutes");
+    const performanceRoutes = require("./routes/performanceRoutes");
     const initializeSocketIO = require("./socket");
     const { initializeFirebase } = require("./config/firebase");
     const recurringService = require("./services/recurringService");
@@ -103,8 +104,8 @@ const startServer = async () => {
 
     // 6. Rate limiting
     const limiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 500,
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 5000, // Increased for development
       skip: (req) => req.method === "OPTIONS",
       message: "Too many requests from this IP, please try again later"
     });
@@ -172,6 +173,7 @@ const startServer = async () => {
     app.use("/api/workspaces/:workspaceId/members", memberRoutes);
     app.use("/api/docs", documentRoutes);
     app.use("/api/invites", publicInviteRouter);
+    app.use("/api/performance", performanceRoutes);
     
     // Error handler middleware (must be last)
     const errorHandler = require("./middlewares/errorMiddleware");

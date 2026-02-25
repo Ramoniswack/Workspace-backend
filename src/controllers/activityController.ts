@@ -172,8 +172,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
   const limitNum = limit ? parseInt(limit) : 100;
   const skipNum = skip ? parseInt(skip) : 0;
 
-  console.log('[getUserActivity] Fetching activities for workspace:', workspaceId);
-
   // Check if user is workspace owner or admin
   const isOwner = workspace.owner.toString() === userId;
   const workspaceMember = workspace.members.find((m: any) => m.user.toString() === userId);
@@ -184,7 +182,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
 
   if (isOwner || isAdmin) {
     // Owners and admins see ALL activities
-    console.log('[getUserActivity] User is owner/admin, fetching all activities');
     
     [workspaceActivities, taskActivities] = await Promise.all([
       WorkspaceActivity.getWorkspaceActivity(workspaceId, {
@@ -200,7 +197,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
     ]);
   } else {
     // Regular members only see activities for spaces/lists they have access to
-    console.log('[getUserActivity] User is regular member, filtering activities by access');
     
     const Space = require("../models/Space");
     const List = require("../models/List");
@@ -215,7 +211,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
     }).select('_id').lean();
     
     const userSpaceIds = userSpaces.map((s: any) => s._id.toString());
-    console.log('[getUserActivity] User has access to spaces:', userSpaceIds);
 
     // Get lists where user is a member (via ListMember)
     const userListMemberships = await ListMember.find({
@@ -228,8 +223,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
     
     // Combine space IDs (from space membership and list membership)
     const allAccessibleSpaceIds = [...new Set([...userSpaceIds, ...additionalSpaceIds])];
-    console.log('[getUserActivity] User has access to lists:', userListIds);
-    console.log('[getUserActivity] All accessible spaces:', allAccessibleSpaceIds);
 
     // Get workspace activities filtered by accessible spaces/lists
     const allWorkspaceActivities = await WorkspaceActivity.find({
@@ -260,7 +253,6 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
     }).select('_id').lean();
     
     const taskIds = tasksInAccessibleLists.map((t: any) => t._id);
-    console.log('[getUserActivity] User has access to tasks:', taskIds.length);
 
     // Get task activities for accessible tasks
     const Activity = require("../models/Activity");
@@ -276,20 +268,13 @@ const getUserActivity = asyncHandler(async (req: any, res: any) => {
       .lean();
   }
 
-  console.log('[getUserActivity] Workspace activities count:', workspaceActivities.length);
-  console.log('[getUserActivity] Task activities count:', taskActivities.length);
-
   // Combine and sort by createdAt
   const allActivities = [...workspaceActivities, ...taskActivities].sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  console.log('[getUserActivity] Combined activities count:', allActivities.length);
-
   // Limit the combined results
   const limitedActivities = allActivities.slice(0, limitNum);
-
-  console.log('[getUserActivity] Returning activities count:', limitedActivities.length);
 
   res.status(200).json({
     success: true,

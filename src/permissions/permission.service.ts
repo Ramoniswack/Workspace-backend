@@ -29,7 +29,7 @@ const {
 const Workspace = require("../models/Workspace");
 const SpaceMember = require("../models/SpaceMember");
 const FolderMember = require("../models/FolderMember");
-const ListMember = require("../models/ListMember");
+const { ListMember } = require("../models/ListMember");
 const Task = require("../models/Task");
 
 class PermissionService {
@@ -55,40 +55,56 @@ class PermissionService {
     context: PermissionContext
   ): Promise<boolean> {
     try {
+      console.log('\n========================================');
+      console.log('🔍 PERMISSION CHECK STARTED');
+      console.log('========================================');
+      console.log('📋 Details:');
+      console.log('  - User ID:', userId);
+      console.log('  - Action:', action);
+      console.log('  - Workspace ID:', context.workspaceId);
+      console.log('  - List ID:', context.listId);
+      console.log('  - Resource Type:', context.resourceType);
+      console.log('  - Resource ID:', context.resourceId);
+      
       // Step 1: Check if user is workspace owner (bypass all checks)
+      console.log('\n🔎 Step 1: Checking if user is OWNER...');
       const isOwner = await this.isOwner(userId, context.workspaceId);
+      console.log('  ➜ Is Owner?', isOwner);
+      
       if (isOwner) {
+        console.log('✅ PERMISSION GRANTED - User is OWNER');
+        console.log('========================================\n');
         return true;
       }
 
       // Step 2: Get user's workspace role
+      console.log('\n🔎 Step 2: Getting user workspace role...');
       const workspaceRole = await this.getUserRole(userId, context.workspaceId);
+      console.log('  ➜ Workspace Role:', workspaceRole);
+      console.log('  ➜ Role Type:', typeof workspaceRole);
       
       if (!workspaceRole) {
+        console.log('❌ PERMISSION DENIED - No workspace role found');
+        console.log('========================================\n');
         return false;
       }
 
-      // Step 2.5: Check if user is admin (bypass list/folder/space overrides)
+      // Step 2.5: Check if user is admin (bypass list/folder/space overrides and task-specific rules)
+      console.log('\n🔎 Step 2.5: Checking if user is ADMIN...');
+      console.log('  ➜ workspaceRole value:', JSON.stringify(workspaceRole));
+      console.log('  ➜ WorkspaceRole.ADMIN value:', JSON.stringify(WorkspaceRole.ADMIN));
+      console.log('  ➜ Strict equality (===):', workspaceRole === WorkspaceRole.ADMIN);
+      console.log('  ➜ Loose equality (==):', workspaceRole == WorkspaceRole.ADMIN);
+      console.log('  ➜ String comparison:', String(workspaceRole) === String(WorkspaceRole.ADMIN));
+      
       if (workspaceRole === WorkspaceRole.ADMIN) {
-        // Admins have full access, check workspace role permissions
-        const hasWorkspacePermission = roleHasPermission(workspaceRole, action);
-        
-        if (!hasWorkspacePermission) {
-          return false;
-        }
-
-        // Apply task-specific rules for admins too
-        if (this.isTaskAction(action) && context.resourceType === "task") {
-          return await this.checkTaskPermission(
-            userId,
-            action,
-            context,
-            workspaceRole
-          );
-        }
-
+        console.log('✅ PERMISSION GRANTED - User is ADMIN');
+        console.log('========================================\n');
+        // Admins have full access to everything
         return true;
       }
+      
+      console.log('  ➜ User is NOT admin, continuing checks...');
 
       // Step 3: Check for list-level override (highest priority for non-admins)
       if (context.listId) {
@@ -99,7 +115,8 @@ class PermissionService {
 
         if (listPermission) {
           // List override exists - use it (no additional task checks needed)
-          return listPermissionHasAction(listPermission, action);
+          const hasListPermission = listPermissionHasAction(listPermission, action);
+          return hasListPermission;
         }
       }
 
@@ -151,24 +168,40 @@ class PermissionService {
       }
 
       // Step 6: No overrides - use workspace role
+      console.log('\n🔎 Step 6: Checking workspace role permissions...');
       const hasWorkspacePermission = roleHasPermission(workspaceRole, action);
+      console.log('  ➜ Has workspace permission?', hasWorkspacePermission);
       
       if (!hasWorkspacePermission) {
         // Step 7: Apply task-specific rules (assignee check as fallback)
         if (this.isTaskAction(action) && context.resourceType === "task") {
-          return await this.checkTaskPermission(
+          console.log('\n🔎 Step 7: Checking task-specific permissions...');
+          const result = await this.checkTaskPermission(
             userId,
             action,
             context,
             workspaceRole
           );
+          console.log('  ➜ Task permission result:', result);
+          if (result) {
+            console.log('✅ PERMISSION GRANTED - Task-specific rule');
+          } else {
+            console.log('❌ PERMISSION DENIED - No task-specific permission');
+          }
+          console.log('========================================\n');
+          return result;
         }
+        console.log('❌ PERMISSION DENIED - No workspace permission');
+        console.log('========================================\n');
         return false;
       }
 
+      console.log('✅ PERMISSION GRANTED - Workspace role permission');
+      console.log('========================================\n');
       return true;
     } catch (error) {
-      console.error("[PermissionService] Error checking permission:", error);
+      console.error("[PermissionService] ❌ Error checking permission:", error);
+      console.log('========================================\n');
       return false;
     }
   }
@@ -184,32 +217,50 @@ class PermissionService {
     workspaceId: string
   ): Promise<WorkspaceRole | null> {
     try {
+      console.log('  📂 Fetching workspace data...');
       const workspace = await Workspace.findById(workspaceId).select(
         "owner members"
       );
 
       if (!workspace) {
+        console.log('  ❌ Workspace not found!');
         return null;
       }
+      
+      console.log('  ✓ Workspace found');
+      console.log('  ➜ Owner ID:', workspace.owner.toString());
 
       // Check if user is owner
       if (workspace.owner.toString() === userId) {
+        console.log('  ✓ User matches owner ID');
         return WorkspaceRole.OWNER;
       }
 
       // Find user in members
+      console.log('  📋 Searching in members array...');
+      console.log('  ➜ Total members:', workspace.members.length);
+      
       const member = workspace.members.find(
         (m: any) => m.user.toString() === userId
       );
 
       if (!member) {
+        console.log('  ❌ User not found in members array');
         return null;
       }
 
-      // Convert lowercase role to uppercase enum
-      return this.normalizeRole(member.role);
+      console.log('  ✓ User found in members!');
+      console.log('  ➜ Raw role from DB:', member.role);
+      console.log('  ➜ Role type:', typeof member.role);
+      
+      // Convert to normalized enum value
+      const normalizedRole = this.normalizeRole(member.role);
+      console.log('  ➜ Normalized role:', normalizedRole);
+      console.log('  ➜ Normalized type:', typeof normalizedRole);
+      
+      return normalizedRole;
     } catch (error) {
-      console.error("[PermissionService] Error getting user role:", error);
+      console.error("[PermissionService] ❌ Error getting user role:", error);
       return null;
     }
   }
@@ -444,15 +495,36 @@ class PermissionService {
    * Normalize role string to WorkspaceRole enum
    */
   normalizeRole(role: string): WorkspaceRole {
-    const roleUpper = role.toUpperCase();
+    console.log('  🔄 Normalizing role...');
+    console.log('    ➜ Input:', role, '(type:', typeof role, ')');
     
-    if (roleUpper === "OWNER") return WorkspaceRole.OWNER;
-    if (roleUpper === "ADMIN") return WorkspaceRole.ADMIN;
-    if (roleUpper === "MEMBER") return WorkspaceRole.MEMBER;
-    if (roleUpper === "GUEST") return WorkspaceRole.GUEST;
+    const roleLower = role.toLowerCase();
+    console.log('    ➜ Lowercased:', roleLower);
     
-    // Default to GUEST if unknown
-    return WorkspaceRole.GUEST;
+    let result: WorkspaceRole;
+    
+    if (roleLower === "owner") {
+      result = WorkspaceRole.OWNER;
+      console.log('    ➜ Matched: OWNER');
+    } else if (roleLower === "admin") {
+      result = WorkspaceRole.ADMIN;
+      console.log('    ➜ Matched: ADMIN');
+    } else if (roleLower === "member") {
+      result = WorkspaceRole.MEMBER;
+      console.log('    ➜ Matched: MEMBER');
+    } else if (roleLower === "guest") {
+      result = WorkspaceRole.GUEST;
+      console.log('    ➜ Matched: GUEST');
+    } else {
+      result = WorkspaceRole.GUEST;
+      console.log('    ➜ No match, defaulting to GUEST');
+    }
+    
+    console.log('    ➜ Output:', result, '(type:', typeof result, ')');
+    console.log('    ➜ WorkspaceRole.ADMIN constant:', WorkspaceRole.ADMIN);
+    console.log('    ➜ Are they equal?:', result === WorkspaceRole.ADMIN);
+    
+    return result;
   }
 }
 
