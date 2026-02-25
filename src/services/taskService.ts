@@ -141,12 +141,6 @@ class TaskService {
 
     const task = await Task.create(taskData);
 
-    console.log('[TaskService] Task created with deadline:', {
-      taskId: task._id,
-      deadline: task.deadline,
-      hasDeadline: !!task.deadline
-    });
-
     // Log activity
     await logger.logActivity({
       userId: createdBy,

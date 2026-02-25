@@ -12,9 +12,6 @@ const createTask = asyncHandler(async (req: AuthRequest, res: Response, next: Ne
   const { title, description, priority, dueDate, deadline, assignee } = req.body;
   const { listId } = req.params;
 
-  console.log('[TaskController] Request body:', req.body);
-  console.log('[TaskController] Extracted deadline:', deadline);
-
   const task = await taskService.createTask({
     title,
     description,
