@@ -4,22 +4,130 @@ const notificationCenterController = require("../controllers/notificationCenterC
 const notificationController = require("../controllers/notificationController");
 const { protect } = require("../middlewares/authMiddleware");
 
+/**
+ * @swagger
+ * tags:
+ *   name: Notification Center
+ *   description: User notification center management
+ */
+
 // All routes require authentication
 router.use(protect);
 
-// POST /api/notifications/fcm-token - Register FCM token
+/**
+ * @swagger
+ * /api/notification-center/fcm-token:
+ *   post:
+ *     summary: Register FCM token
+ *     description: Register Firebase Cloud Messaging token
+ *     tags: [Notification Center]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: FCM token registered successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.post("/fcm-token", notificationController.registerFCMToken);
 
-// GET /api/notifications - Get user notifications
+/**
+ * @swagger
+ * /api/notification-center:
+ *   get:
+ *     summary: Get notifications
+ *     description: Retrieve user's notifications
+ *     tags: [Notification Center]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *         description: Number of notifications to retrieve
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: number
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Notifications retrieved successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.get("/", notificationCenterController.getNotifications);
 
-// GET /api/notifications/unread-count - Get unread count
+/**
+ * @swagger
+ * /api/notification-center/unread-count:
+ *   get:
+ *     summary: Get unread count
+ *     description: Get count of unread notifications
+ *     tags: [Notification Center]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Unread count retrieved successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.get("/unread-count", notificationCenterController.getUnreadCount);
 
-// PATCH /api/notifications/read-all - Mark all as read
+/**
+ * @swagger
+ * /api/notification-center/read-all:
+ *   patch:
+ *     summary: Mark all as read
+ *     description: Mark all notifications as read
+ *     tags: [Notification Center]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ *       401:
+ *         description: Authentication required
+ */
 router.patch("/read-all", notificationCenterController.markAllAsRead);
 
-// PATCH /api/notifications/:id/read - Mark as read
+/**
+ * @swagger
+ * /api/notification-center/{id}/read:
+ *   patch:
+ *     summary: Mark notification as read
+ *     description: Mark a specific notification as read
+ *     tags: [Notification Center]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Notification ID
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: Notification not found
+ */
 router.patch("/:id/read", notificationCenterController.markAsRead);
 
 module.exports = router;

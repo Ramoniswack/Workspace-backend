@@ -5,11 +5,60 @@ const { protect } = require("../middlewares/authMiddleware");
 const { uploadSingle, handleUploadError } = require("../middlewares/uploadMiddleware");
 
 /**
- * Upload Routes
- * All routes require authentication
+ * @swagger
+ * tags:
+ *   name: Upload
+ *   description: File upload management
  */
 
-// Task attachments
+/**
+ * @swagger
+ * /api/upload/tasks/{taskId}/attachments:
+ *   post:
+ *     summary: Upload task attachment
+ *     description: Upload a file attachment to a task
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: File uploaded successfully
+ *       401:
+ *         description: Authentication required
+ *   get:
+ *     summary: Get task attachments
+ *     description: Retrieve all attachments for a task
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Attachments retrieved successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.post(
   "/tasks/:taskId/attachments",
   protect,
@@ -24,7 +73,54 @@ router.get(
   uploadController.getTaskAttachments
 );
 
-// Comment attachments
+/**
+ * @swagger
+ * /api/upload/comments/{commentId}/attachments:
+ *   post:
+ *     summary: Upload comment attachment
+ *     description: Upload a file attachment to a comment
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: File uploaded successfully
+ *       401:
+ *         description: Authentication required
+ *   get:
+ *     summary: Get comment attachments
+ *     description: Retrieve all attachments for a comment
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Attachments retrieved successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.post(
   "/comments/:commentId/attachments",
   protect,
@@ -39,7 +135,54 @@ router.get(
   uploadController.getCommentAttachments
 );
 
-// Direct message attachments
+/**
+ * @swagger
+ * /api/upload/dm/{conversationId}/attachments:
+ *   post:
+ *     summary: Upload DM attachment
+ *     description: Upload a file attachment to a direct message
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: File uploaded successfully
+ *       401:
+ *         description: Authentication required
+ *   get:
+ *     summary: Get conversation attachments
+ *     description: Retrieve all attachments in a conversation
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Attachments retrieved successfully
+ *       401:
+ *         description: Authentication required
+ */
 router.post(
   "/dm/:conversationId/attachments",
   protect,
@@ -54,7 +197,29 @@ router.get(
   uploadController.getConversationAttachments
 );
 
-// Delete attachment
+/**
+ * @swagger
+ * /api/upload/attachments/{attachmentId}:
+ *   delete:
+ *     summary: Delete attachment
+ *     description: Delete a file attachment
+ *     tags: [Upload]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: attachmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Attachment deleted successfully
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: Attachment not found
+ */
 router.delete(
   "/attachments/:attachmentId",
   protect,

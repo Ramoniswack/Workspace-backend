@@ -241,32 +241,7 @@ const gracefulShutdown = async (signal) => {
     console.error('[Server] Error closing sockets:', error);
   }
   
-  // Try to close queue (if it exists)
-  try {
-    const { closeQueue } = require("./queues/notification.queue");
-    await closeQueue();
-    console.log('[Server] ✓ Queue closed');
-  } catch (error) {
-    console.log('[Server] Queue not available or already closed (this is OK)');
-  }
-  
-  // Try to close worker (if it exists)
-  try {
-    const { closeWorker } = require("./workers/notification.worker");
-    await closeWorker();
-    console.log('[Server] ✓ Worker closed');
-  } catch (error) {
-    console.log('[Server] Worker not available or already closed (this is OK)');
-  }
-  
-  // Try to close Redis (if it exists)
-  try {
-    const { closeRedis } = require("./config/redis");
-    await closeRedis();
-    console.log('[Server] ✓ Redis closed');
-  } catch (error) {
-    console.log('[Server] Redis not available or already closed (this is OK)');
-  }
+  // All cleanup done - no queues, workers, or Redis to close
   
   // Close HTTP server
   httpServer.close(() => {
