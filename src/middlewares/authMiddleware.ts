@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 interface DecodedToken {
   id: string;
@@ -11,6 +12,8 @@ interface DecodedToken {
 interface AuthRequest extends Request {
   user?: {
     id: string;
+    _id?: string;
+    isSuperUser?: boolean;
   };
 }
 
@@ -41,8 +44,23 @@ const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET) as DecodedToken;
       
-      // Attach user to request
-      req.user = { id: decoded.id };
+      // Fetch user from database to get isSuperUser flag
+      const user = await User.findById(decoded.id).select("-password");
+      
+      if (!user) {
+        console.error("[Auth] User not found");
+        return res.status(401).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+      
+      // Attach user to request with isSuperUser flag
+      req.user = { 
+        id: decoded.id,
+        _id: user._id,
+        isSuperUser: user.isSuperUser || false
+      };
       
       // Continue to next middleware
       next();
@@ -82,4 +100,4 @@ const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
 };
 
 module.exports = { protect };
-export {};
+export type { AuthRequest };

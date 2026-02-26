@@ -78,6 +78,10 @@ const startServer = async () => {
     const memberRoutes = require("./routes/memberRoutes");
     const documentRoutes = require("./routes/documentRoutes");
     const performanceRoutes = require("./routes/performanceRoutes");
+    const planRoutes = require("./routes/planRoutes");
+    const superAdminRoutes = require("./routes/superAdminRoutes");
+    const subscriptionRoutes = require("./routes/subscriptionRoutes");
+    const feedbackRoutes = require("./routes/feedbackRoutes");
     const initializeSocketIO = require("./socket");
     const { initializeFirebase } = require("./config/firebase");
     const recurringService = require("./services/recurringService");
@@ -174,6 +178,10 @@ const startServer = async () => {
     app.use("/api/docs", documentRoutes);
     app.use("/api/invites", publicInviteRouter);
     app.use("/api/performance", performanceRoutes);
+    app.use("/api/plans", planRoutes);
+    app.use("/api/super-admin", superAdminRoutes);
+    app.use("/api/subscription", subscriptionRoutes);
+    app.use("/api/feedback", feedbackRoutes);
     
     // Error handler middleware (must be last)
     const errorHandler = require("./middlewares/errorMiddleware");

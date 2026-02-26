@@ -13,6 +13,7 @@ const {
   getDependents
 } = require("../controllers/taskController");
 const { protect } = require("../middlewares/authMiddleware");
+const { checkTaskLimit } = require("../middlewares/subscriptionMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
 const validate = require("../utils/validation");
 const { 
@@ -182,7 +183,7 @@ const listTaskRouter = express.Router({ mergeParams: true });
  *       404:
  *         description: List not found
  */
-listTaskRouter.post("/", protect, requirePermission("CREATE_TASK"), validate(createTaskSchema), createTask);
+listTaskRouter.post("/", protect, checkTaskLimit, requirePermission("CREATE_TASK"), validate(createTaskSchema), createTask);
 listTaskRouter.get("/", protect, requirePermission("VIEW_TASK"), getListTasks);
 
 // Standalone task router
@@ -398,7 +399,7 @@ taskRouter.delete("/:id", protect, requirePermission("DELETE_TASK"), deleteTask)
  *       404:
  *         description: Parent task not found
  */
-taskRouter.post("/:taskId/subtasks", protect, requirePermission("CREATE_TASK"), validate(createSubtaskSchema), createSubtask);
+taskRouter.post("/:taskId/subtasks", protect, checkTaskLimit, requirePermission("CREATE_TASK"), validate(createSubtaskSchema), createSubtask);
 taskRouter.get("/:taskId/subtasks", protect, requirePermission("VIEW_TASK"), getSubtasks);
 
 /**

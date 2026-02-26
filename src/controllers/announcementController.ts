@@ -44,7 +44,16 @@ exports.createAnnouncement = async (req, res) => {
     }
 
     // Check if user is workspace owner or admin
-    const workspace = await Workspace.findById(workspaceId);
+    const workspace = await Workspace.findById(workspaceId).populate({
+      path: 'owner',
+      populate: {
+        path: 'subscription',
+        populate: {
+          path: 'plan'
+        }
+      }
+    });
+    
     if (!workspace) {
       return res.status(404).json({
         success: false,
@@ -52,7 +61,7 @@ exports.createAnnouncement = async (req, res) => {
       });
     }
 
-    const isOwner = workspace.owner.toString() === userId;
+    const isOwner = workspace.owner._id.toString() === userId;
     const member = workspace.members.find(
       (m) => m.user.toString() === userId
     );
@@ -65,11 +74,38 @@ exports.createAnnouncement = async (req, res) => {
       });
     }
 
+    // Check announcement cooldown based on workspace owner's plan
+    const ownerSubscription = workspace.owner.subscription;
+    const plan = ownerSubscription?.plan;
+    const announcementCooldown = plan?.features?.announcementCooldown || 24; // Default 24 hours
+
+    if (workspace.lastAnnouncementTime) {
+      const currentTime = new Date();
+      const timeSinceLastAnnouncement = (currentTime.getTime() - workspace.lastAnnouncementTime.getTime()) / (1000 * 60 * 60); // Convert to hours
+
+      if (timeSinceLastAnnouncement < announcementCooldown) {
+        const hoursRemaining = Math.ceil(announcementCooldown - timeSinceLastAnnouncement);
+        return res.status(429).json({
+          success: false,
+          message: `Announcement cooldown active. You can post one announcement every ${announcementCooldown} hours on your current plan. Please wait ${hoursRemaining} more hour(s) or upgrade your plan for more frequent announcements.`,
+          code: 'ANNOUNCEMENT_COOLDOWN',
+          cooldownHours: announcementCooldown,
+          hoursRemaining: hoursRemaining,
+          action: 'upgrade',
+          feature: 'announcements'
+        });
+      }
+    }
+
     const announcement = await Announcement.create({
       content: content.trim(),
       workspace: workspaceId,
       author: userId,
     });
+
+    // Update workspace lastAnnouncementTime
+    workspace.lastAnnouncementTime = new Date();
+    await workspace.save();
 
     const populatedAnnouncement = await Announcement.findById(announcement._id)
       .populate('author', 'name email avatar')

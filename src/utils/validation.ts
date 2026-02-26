@@ -6,7 +6,12 @@ const AppError = require("./AppError");
 const validate = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = schema.safeParse(req.body);
+      // Parse the entire request object (body, params, query)
+      const result = schema.safeParse({
+        body: req.body,
+        params: req.params,
+        query: req.query
+      });
 
       if (!result.success) {
         // Safety check: ensure errors array exists
@@ -26,7 +31,9 @@ const validate = (schema: ZodSchema) => {
         ));
       }
 
-      req.body = result.data;
+      // Don't reassign req properties - they're already validated
+      // The validated data is the same as the original request data
+      
       next();
     } catch (error) {
       next(error);

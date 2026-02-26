@@ -2,7 +2,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const performanceService = require("../services/performanceService");
 const AppError = require("../utils/AppError");
 import { Response, NextFunction } from "express";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/authMiddleware";
 
 // @desc    Get user performance metrics
 // @route   GET /api/performance/user/:userId/workspace/:workspaceId

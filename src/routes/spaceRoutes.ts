@@ -11,6 +11,7 @@ const {
 } = require("../controllers/spaceController");
 const { protect } = require("../middlewares/authMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
+const { checkSpaceLimit } = require("../middlewares/subscriptionMiddleware");
 const validate = require("../utils/validation");
 const { createSpaceSchema, updateSpaceSchema } = require("../validators/spaceValidators");
 
@@ -19,7 +20,7 @@ const workspaceSpaceRouter = express.Router({ mergeParams: true });
 
 // POST /api/workspaces/:workspaceId/spaces - Create space (admin or owner)
 // GET /api/workspaces/:workspaceId/spaces - Get all spaces (any member)
-workspaceSpaceRouter.post("/", protect, requirePermission("CREATE_SPACE"), validate(createSpaceSchema), createSpace);
+workspaceSpaceRouter.post("/", protect, requirePermission("CREATE_SPACE"), checkSpaceLimit, validate(createSpaceSchema), createSpace);
 workspaceSpaceRouter.get("/", protect, requirePermission("VIEW_SPACE"), getWorkspaceSpaces);
 
 // Standalone space router

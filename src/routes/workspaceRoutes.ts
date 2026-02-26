@@ -14,11 +14,12 @@ const {
 } = require("../controllers/announcementController");
 const { toggleWorkspaceClock } = require("../controllers/workspaceMemberController");
 const { protect } = require("../middlewares/authMiddleware");
+const { checkWorkspaceLimit } = require("../middlewares/subscriptionMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
 
 const router = express.Router();
 
-router.post("/", protect, createWorkspace);
+router.post("/", protect, checkWorkspaceLimit, createWorkspace);
 router.get("/", protect, getMyWorkspaces);
 
 router.get("/:id", protect, requirePermission("VIEW_WORKSPACE"), getWorkspace);

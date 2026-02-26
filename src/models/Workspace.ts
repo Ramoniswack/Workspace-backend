@@ -20,6 +20,7 @@ export interface IWorkspace extends Document {
   name: string;
   owner: Schema.Types.ObjectId;
   members: IWorkspaceMember[];
+  lastAnnouncementTime?: Date;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -64,6 +65,10 @@ const workspaceSchema = new mongoose.Schema(
     },
     deletedAt: {
       type: Date
+    },
+    lastAnnouncementTime: {
+      type: Date,
+      default: null
     }
   },
   {

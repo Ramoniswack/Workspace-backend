@@ -8,6 +8,7 @@ const {
 } = require("../controllers/listController");
 const { protect } = require("../middlewares/authMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
+const { checkListLimit } = require("../middlewares/subscriptionMiddleware");
 const validate = require("../utils/validation");
 const { createListSchema, updateListSchema } = require("../validators/listValidators");
 
@@ -16,7 +17,7 @@ const spaceListRouter = express.Router({ mergeParams: true });
 
 // POST /api/spaces/:spaceId/lists - Create list (admin or owner)
 // GET /api/spaces/:spaceId/lists - Get all lists (any member)
-spaceListRouter.post("/", protect, requirePermission("CREATE_LIST"), validate(createListSchema), createList);
+spaceListRouter.post("/", protect, requirePermission("CREATE_LIST"), checkListLimit, validate(createListSchema), createList);
 spaceListRouter.get("/", protect, requirePermission("VIEW_LIST"), getSpaceLists);
 
 // Standalone list router

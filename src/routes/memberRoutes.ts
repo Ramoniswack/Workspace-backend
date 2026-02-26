@@ -7,6 +7,7 @@ const {
   updateMyStatus,
 } = require("../controllers/memberController");
 const { protect } = require("../middlewares/authMiddleware");
+const { checkMemberLimit } = require("../middlewares/subscriptionMiddleware");
 const { requirePermission } = require("../permissions/permission.middleware");
 
 const router = express.Router({ mergeParams: true });
@@ -15,7 +16,7 @@ const router = express.Router({ mergeParams: true });
 router.get("/", protect, requirePermission("VIEW_WORKSPACE"), getWorkspaceMembers);
 
 // POST /api/workspaces/:workspaceId/members/invite - Invite member (admin or owner)
-router.post("/invite", protect, requirePermission("INVITE_MEMBER"), inviteMember);
+router.post("/invite", protect, checkMemberLimit, requirePermission("INVITE_MEMBER"), inviteMember);
 
 // PATCH /api/workspaces/:workspaceId/members/me/status - Update own status (any member)
 router.patch("/me/status", protect, requirePermission("VIEW_WORKSPACE"), updateMyStatus);

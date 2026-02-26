@@ -485,6 +485,60 @@ const options: swaggerJsdoc.Options = {
               description: "Average days from creation to completion"
             }
           }
+        },
+        Plan: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Plan ID"
+            },
+            name: {
+              type: "string",
+              description: "Plan name"
+            },
+            price: {
+              type: "number",
+              description: "Plan price"
+            },
+            description: {
+              type: "string",
+              description: "Plan description"
+            },
+            features: {
+              type: "object",
+              properties: {
+                maxWorkspaces: {
+                  type: "number",
+                  description: "Maximum number of workspaces allowed"
+                },
+                maxMembers: {
+                  type: "number",
+                  description: "Maximum number of members per workspace"
+                },
+                hasAccessControl: {
+                  type: "boolean",
+                  description: "Whether advanced access control is enabled"
+                },
+                messageLimit: {
+                  type: "number",
+                  description: "Maximum number of messages allowed"
+                }
+              }
+            },
+            isActive: {
+              type: "boolean",
+              description: "Whether the plan is active"
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time"
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time"
+            }
+          }
         }
       }
     },
@@ -557,6 +611,14 @@ const options: swaggerJsdoc.Options = {
       {
         name: "Direct Messages",
         description: "Private messaging between users"
+      },
+      {
+        name: "Plans",
+        description: "Subscription plan management"
+      },
+      {
+        name: "Super Admin",
+        description: "Super admin dashboard and system management"
       }
     ]
   },

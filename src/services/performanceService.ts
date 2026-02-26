@@ -119,7 +119,7 @@ class PerformanceService {
     // Get performance for each user
     const teamPerformance = await Promise.all(
       userIds.map(async (userId) => {
-        const metrics = await this.getUserPerformance(userId!, workspaceId);
+        const metrics = await this.getUserPerformance(userId as string, workspaceId);
         
         // Get user details
         const User = require("../models/User");

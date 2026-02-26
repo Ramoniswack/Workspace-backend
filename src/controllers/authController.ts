@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
-const User = require("../models/User");
 const generateToken = require("../utils/generateToken");
 const admin = require("firebase-admin");
+import User from "../models/User";
 
 // Don't initialize here - use the existing initialization from config/firebase.ts
 // Firebase Admin is already initialized in server.ts
@@ -55,13 +55,13 @@ const loginUser = async (req: any, res: any) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(404).json({ message: "User does not exist. Please register first." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Incorrect password. Please try again." });
     }
 
     // STANDARDIZED RESPONSE
@@ -72,7 +72,8 @@ const loginUser = async (req: any, res: any) => {
       user: {
         _id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        isSuperUser: user.isSuperUser || false
       }
     });
   } catch (error) {
@@ -179,5 +180,4 @@ const googleAuth = async (req: any, res: any) => {
 };
 
 module.exports = { registerUser, loginUser, googleAuth };
-
 export {};
