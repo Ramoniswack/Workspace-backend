@@ -28,7 +28,7 @@ const createPlanSchema = z.object({
       hasGroupChat: z.boolean().optional(),
       messageLimit: z.number().min(-1, "Message limit must be -1 or greater").optional(),
       announcementCooldown: z.number().min(0, "Announcement cooldown must be 0 or greater").optional(),
-      accessControlTier: z.enum(['none', 'pro', 'advanced']).optional()
+      accessControlTier: z.enum(['none', 'basic', 'pro', 'advanced']).optional()
     }).optional(),
     
     isActive: z.boolean().optional()
@@ -60,7 +60,7 @@ const updatePlanSchema = z.object({
       hasGroupChat: z.boolean().optional(),
       messageLimit: z.number().min(-1, "Message limit must be -1 or greater").optional(),
       announcementCooldown: z.number().min(0, "Announcement cooldown must be 0 or greater").optional(),
-      accessControlTier: z.enum(['none', 'pro', 'advanced']).optional()
+      accessControlTier: z.enum(['none', 'basic', 'pro', 'advanced']).optional()
     }).optional(),
     
     isActive: z.boolean().optional()

@@ -17,7 +17,7 @@ interface IPlan extends Document {
     hasGroupChat: boolean;
     messageLimit: number;
     announcementCooldown: number;
-    accessControlTier: 'none' | 'pro' | 'advanced';
+    accessControlTier: 'none' | 'basic' | 'pro' | 'advanced';
   };
   isActive: boolean;
   createdAt: Date;
@@ -114,7 +114,7 @@ const planSchema = new mongoose.Schema(
       },
       accessControlTier: {
         type: String,
-        enum: ['none', 'pro', 'advanced'],
+        enum: ['none', 'basic', 'pro', 'advanced'],
         required: true,
         default: 'none'
       }
