@@ -5,6 +5,7 @@ const Space = require("../models/Space");
 const List = require("../models/List");
 const chatService = require("../services/chatService");
 const presenceManager = require("./presence");
+const { checkMessageLimitForWorkspace } = require("../middlewares/messageLimitMiddleware");
 
 /**
  * Register all socket event handlers
@@ -299,6 +300,14 @@ const registerHandlers = (io, socket) => {
 
       if (!content || content.trim().length === 0) {
         socket.emit("error", { message: "Message content is required" });
+        return;
+      }
+
+      // Check message limit before creating message
+      const limitCheck = await checkMessageLimitForWorkspace(workspaceId);
+      
+      if (!limitCheck.allowed) {
+        socket.emit("error", limitCheck.error);
         return;
       }
 

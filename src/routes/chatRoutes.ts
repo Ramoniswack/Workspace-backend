@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const chatController = require("../controllers/chatController");
 const { protect } = require("../middlewares/authMiddleware");
+const { checkMessageLimit } = require("../middlewares/messageLimitMiddleware");
 const validate = require("../utils/validation");
 const { sendMessageSchema } = require("../validators/chatValidators");
 
@@ -93,7 +94,7 @@ const workspaceChatRouter = express.Router({ mergeParams: true });
  */
 workspaceChatRouter
   .route("/")
-  .post(protect, validate(sendMessageSchema), chatController.sendMessage)
+  .post(protect, checkMessageLimit, validate(sendMessageSchema), chatController.sendMessage)
   .get(protect, chatController.getMessages);
 
 // Individual message routes

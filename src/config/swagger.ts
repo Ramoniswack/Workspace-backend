@@ -420,6 +420,78 @@ const options: swaggerJsdoc.Options = {
             }
           }
         },
+        WorkspaceFile: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "File ID"
+            },
+            workspace: {
+              type: "string",
+              description: "Workspace ID"
+            },
+            uploadedBy: {
+              type: "object",
+              properties: {
+                _id: {
+                  type: "string"
+                },
+                name: {
+                  type: "string"
+                },
+                email: {
+                  type: "string"
+                },
+                avatar: {
+                  type: "string"
+                }
+              },
+              description: "User who uploaded the file"
+            },
+            fileName: {
+              type: "string",
+              description: "File name"
+            },
+            originalName: {
+              type: "string",
+              description: "Original file name"
+            },
+            fileType: {
+              type: "string",
+              description: "MIME type"
+            },
+            fileSize: {
+              type: "number",
+              description: "File size in bytes"
+            },
+            cloudinaryUrl: {
+              type: "string",
+              description: "Cloudinary URL"
+            },
+            cloudinaryPublicId: {
+              type: "string",
+              description: "Cloudinary public ID"
+            },
+            resourceType: {
+              type: "string",
+              enum: ["image", "video", "raw", "auto"],
+              description: "Resource type"
+            },
+            format: {
+              type: "string",
+              description: "File format"
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time"
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time"
+            }
+          }
+        },
         AnalyticsSummary: {
           type: "object",
           properties: {
@@ -587,6 +659,10 @@ const options: swaggerJsdoc.Options = {
       {
         name: "Attachments",
         description: "File uploads via Cloudinary"
+      },
+      {
+        name: "Workspace Files",
+        description: "Workspace-wide file management"
       },
       {
         name: "Analytics",

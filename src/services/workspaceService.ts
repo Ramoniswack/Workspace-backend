@@ -17,7 +17,7 @@ class WorkspaceService {
         {
           user: data.owner,
           role: "owner",
-          status: "inactive" // Initialize status
+          status: "active" // Owner should be active by default
         }
       ]
     });
@@ -39,11 +39,29 @@ class WorkspaceService {
       isDeleted: false,
       $or: [{ owner: userId }, { "members.user": userId }]
     })
-      .populate("owner", "name email avatar")
+      .populate({
+        path: "owner",
+        select: "name email avatar subscription",
+        populate: {
+          path: "subscription.planId",
+          model: "Plan"
+        }
+      })
       .populate("members.user", "name email avatar")
       .sort("-createdAt");
 
-    return workspaces;
+    // Transform workspaces to include subscription at workspace level
+    return workspaces.map((workspace: any) => {
+      const workspaceObj = workspace.toObject();
+      if (workspaceObj.owner && workspaceObj.owner.subscription) {
+        workspaceObj.subscription = {
+          isPaid: workspaceObj.owner.subscription.isPaid,
+          status: workspaceObj.owner.subscription.status,
+          plan: workspaceObj.owner.subscription.planId
+        };
+      }
+      return workspaceObj;
+    });
   }
 
   async getWorkspaceById(workspaceId: string, userId: string) {
@@ -51,7 +69,14 @@ class WorkspaceService {
       _id: workspaceId,
       isDeleted: false
     })
-      .populate("owner", "name email avatar")
+      .populate({
+        path: "owner",
+        select: "name email avatar subscription",
+        populate: {
+          path: "subscription.planId",
+          model: "Plan"
+        }
+      })
       .populate("members.user", "name email avatar");
 
     if (!workspace) {
@@ -66,7 +91,17 @@ class WorkspaceService {
       throw new AppError("You do not have access to this workspace", 403);
     }
 
-    return workspace;
+    // Transform the response to include subscription at workspace level for easier access
+    const workspaceObj = workspace.toObject();
+    if (workspaceObj.owner && workspaceObj.owner.subscription) {
+      workspaceObj.subscription = {
+        isPaid: workspaceObj.owner.subscription.isPaid,
+        status: workspaceObj.owner.subscription.status,
+        plan: workspaceObj.owner.subscription.planId
+      };
+    }
+
+    return workspaceObj;
   }
 
   async deleteWorkspace(workspaceId: string, userId: string) {

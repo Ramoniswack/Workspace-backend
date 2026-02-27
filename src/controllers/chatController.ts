@@ -18,10 +18,17 @@ const sendMessage = asyncHandler(async (req: any, res: any) => {
     mentions,
   });
 
-  res.status(201).json({
+  // Include message usage in response
+  const response: any = {
     success: true,
     data: message,
-  });
+  };
+
+  if (req.messageUsage) {
+    response.messageUsage = req.messageUsage;
+  }
+
+  res.status(201).json(response);
 });
 
 /**

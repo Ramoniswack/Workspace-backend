@@ -82,6 +82,7 @@ const startServer = async () => {
     const superAdminRoutes = require("./routes/superAdminRoutes");
     const subscriptionRoutes = require("./routes/subscriptionRoutes");
     const feedbackRoutes = require("./routes/feedbackRoutes");
+    const { workspaceFileRouter, fileRouter } = require("./routes/workspaceFileRoutes");
     const initializeSocketIO = require("./socket");
     const { initializeFirebase } = require("./config/firebase");
     const recurringService = require("./services/recurringService");
@@ -182,6 +183,8 @@ const startServer = async () => {
     app.use("/api/super-admin", superAdminRoutes);
     app.use("/api/subscription", subscriptionRoutes);
     app.use("/api/feedback", feedbackRoutes);
+    app.use("/api/workspaces/:workspaceId/files", workspaceFileRouter);
+    app.use("/api/workspace-files", fileRouter);
     
     // Error handler middleware (must be last)
     const errorHandler = require("./middlewares/errorMiddleware");

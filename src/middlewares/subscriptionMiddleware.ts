@@ -204,19 +204,30 @@ const checkMemberLimit = async (req: AuthRequest, res: Response, next: NextFunct
       });
     }
 
-    // Get current member count
-    const currentMemberCount = workspace.members?.length || 0;
+    // Get current ACTIVE member count (only count active members, not removed/inactive ones)
+    const currentMemberCount = workspace.members?.filter((m: any) => m.status === 'active').length || 0;
+
+    console.log('[Member Limit] Total members in array:', workspace.members?.length);
+    console.log('[Member Limit] Active members:', currentMemberCount);
 
     // Get plan limits from OWNER's subscription
     let maxMembers = 5; // Fallback if no plan found
     let planName = 'Free (Default)';
     
+    console.log('[Member Limit] Owner subscription:', JSON.stringify(owner.subscription, null, 2));
+    
     if (owner.subscription?.isPaid && owner.subscription.planId) {
       // Paid user - use their plan
       const plan = owner.subscription.planId;
+      console.log('[Member Limit] Plan object:', JSON.stringify(plan, null, 2));
+      console.log('[Member Limit] Plan features:', plan.features);
+      
       maxMembers = plan.features?.maxMembers ?? 5;
-      planName = plan.name;
+      planName = plan.name || 'Unknown Plan';
+      
+      console.log('[Member Limit] Using plan:', planName, 'with maxMembers:', maxMembers);
     } else {
+      console.log('[Member Limit] No paid plan, checking for free plan in database');
       // Free user - try to find a free plan in database
       const Plan = require("../models/Plan");
       const freePlan = await Plan.findOne({ 
@@ -227,14 +238,23 @@ const checkMemberLimit = async (req: AuthRequest, res: Response, next: NextFunct
       if (freePlan) {
         maxMembers = freePlan.features?.maxMembers ?? 5;
         planName = freePlan.name;
+        console.log('[Member Limit] Using free plan:', planName, 'with maxMembers:', maxMembers);
+      } else {
+        console.log('[Member Limit] No free plan found, using fallback maxMembers:', maxMembers);
       }
     }
 
-    // Check if limit reached (-1 means unlimited)
+    console.log('[Member Limit] Max members allowed:', maxMembers);
+    console.log('[Member Limit] Current active members:', currentMemberCount);
+    console.log('[Member Limit] After adding new member:', currentMemberCount + 1);
+    console.log('[Member Limit] Check: Will adding new member exceed limit?', (currentMemberCount + 1) > maxMembers);
+
+    // Check if adding a new member would exceed the limit (-1 means unlimited)
     if (maxMembers !== -1 && currentMemberCount >= maxMembers) {
+      console.log('[Member Limit] BLOCKED: Member limit reached');
       return res.status(403).json({
         success: false,
-        message: `This workspace has reached its member limit (${maxMembers}/${maxMembers}). Upgrade your plan to invite more team members and collaborate better.`,
+        message: `This workspace has reached its member limit (${currentMemberCount}/${maxMembers}). Upgrade your plan to invite more team members and collaborate better.`,
         code: "MEMBER_LIMIT_REACHED",
         currentCount: currentMemberCount,
         maxAllowed: maxMembers,
@@ -244,6 +264,7 @@ const checkMemberLimit = async (req: AuthRequest, res: Response, next: NextFunct
       });
     }
 
+    console.log('[Member Limit] ALLOWED: Can add new member');
     next();
   } catch (error: any) {
     console.error("[Member Limit] Error:", error);

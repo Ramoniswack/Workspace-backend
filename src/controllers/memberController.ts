@@ -26,16 +26,19 @@ const getWorkspaceMembers = asyncHandler(
       return next(new AppError("Workspace not found", 404));
     }
 
-    // Format response
-    const members = workspace.members.map((member: any) => ({
-      _id: member.user._id,
-      name: member.user.name,
-      email: member.user.email,
-      role: member.role,
-      isOwner: workspace.owner.toString() === member.user._id.toString(),
-    }));
+    // Format response - only return ACTIVE members
+    const members = workspace.members
+      .filter((member: any) => member.status === 'active')
+      .map((member: any) => ({
+        _id: member.user._id,
+        name: member.user.name,
+        email: member.user.email,
+        role: member.role,
+        status: member.status,
+        isOwner: workspace.owner.toString() === member.user._id.toString(),
+      }));
 
-    console.log('[MemberController] Members retrieved', { count: members.length });
+    console.log('[MemberController] Active members retrieved', { count: members.length });
 
     res.status(200).json({
       success: true,
@@ -161,7 +164,7 @@ const removeMember = asyncHandler(
       return next(new AppError("Cannot remove yourself. Use leave workspace instead.", 400));
     }
 
-    // Find and remove member
+    // Find member
     const memberIndex = workspace.members.findIndex(
       (m: any) => m.user.toString() === userId
     );
@@ -170,8 +173,13 @@ const removeMember = asyncHandler(
       return next(new AppError("Member not found in workspace", 404));
     }
 
-    workspace.members.splice(memberIndex, 1);
+    // Mark member as inactive instead of removing them
+    // This allows the slot to be reused for new members
+    workspace.members[memberIndex].status = 'inactive';
     await workspace.save();
+
+    console.log('[RemoveMember] Member marked as inactive:', userId);
+    console.log('[RemoveMember] Active members:', workspace.members.filter((m: any) => m.status === 'active').length);
 
     res.status(200).json({
       success: true,
@@ -216,22 +224,49 @@ const inviteMember = asyncHandler(
       return next(new AppError("User not found with that email", 404));
     }
 
-    // Check if already a member
-    const existingMember = workspace.members.find(
+    // Check if user exists in members array (active or inactive)
+    const existingMemberIndex = workspace.members.findIndex(
       (m: any) => m.user.toString() === user._id.toString()
     );
 
-    if (existingMember) {
-      return next(new AppError("User is already a member of this workspace", 400));
+    if (existingMemberIndex !== -1) {
+      const existingMember = workspace.members[existingMemberIndex];
+      
+      // If member is active, they're already in the workspace
+      if (existingMember.status === 'active') {
+        return next(new AppError("User is already a member of this workspace", 400));
+      }
+      
+      // If member is inactive, reactivate them
+      console.log('[InviteMember] Reactivating previously removed member:', user.email);
+      workspace.members[existingMemberIndex].status = 'active';
+      workspace.members[existingMemberIndex].role = role;
+      await workspace.save();
+      
+      return res.status(200).json({
+        success: true,
+        message: "Member re-added successfully",
+        data: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: role,
+          isOwner: false,
+        },
+      });
     }
 
-    // Add member
+    // Add new member
     workspace.members.push({
       user: user._id,
       role: role,
+      status: 'active', // Explicitly set as active
     });
 
     await workspace.save();
+
+    console.log('[InviteMember] New member added:', user.email);
+    console.log('[InviteMember] Active members:', workspace.members.filter((m: any) => m.status === 'active').length);
 
     res.status(200).json({
       success: true,

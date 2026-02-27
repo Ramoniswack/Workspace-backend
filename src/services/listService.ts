@@ -21,6 +21,8 @@ class ListService {
   async createList(data: CreateListData) {
     const { name, space: spaceId, createdBy, folderId } = data;
 
+    console.log('[ListService] createList called with:', { name, spaceId, createdBy, folderId });
+
     // Verify space exists
     const space = await Space.findOne({
       _id: spaceId,
@@ -28,7 +30,27 @@ class ListService {
     });
 
     if (!space) {
+      console.error('[ListService] Space not found:', spaceId);
       throw new AppError("Space not found", 404);
+    }
+
+    console.log('[ListService] Space found:', space.name);
+
+    // If folderId is provided, verify folder exists and belongs to this space
+    if (folderId) {
+      console.log('[ListService] Validating folder:', folderId);
+      const Folder = require("../models/Folder");
+      const folder = await Folder.findOne({
+        _id: folderId,
+        spaceId: spaceId,
+        isDeleted: false
+      });
+
+      if (!folder) {
+        console.error('[ListService] Folder not found or does not belong to space:', { folderId, spaceId });
+        throw new AppError("Folder not found or does not belong to this space", 404);
+      }
+      console.log('[ListService] Folder validated:', folder.name);
     }
 
     // Verify user is workspace member (not just space member)
@@ -39,16 +61,22 @@ class ListService {
     });
 
     if (!workspace) {
+      console.error('[ListService] Workspace not found:', space.workspace);
       throw new AppError("Workspace not found", 404);
     }
+
+    console.log('[ListService] Workspace found:', workspace.name);
 
     const isWorkspaceMember = workspace.members.some(
       (member: any) => member.user.toString() === createdBy
     );
 
     if (!isWorkspaceMember) {
+      console.error('[ListService] User is not a workspace member:', { userId: createdBy, workspaceId: workspace._id });
       throw new AppError("You must be a workspace member to create a list", 403);
     }
+
+    console.log('[ListService] User is workspace member, creating list...');
 
     // Create list
     const list = await List.create({
@@ -58,6 +86,8 @@ class ListService {
       createdBy,
       folderId: folderId || null
     });
+
+    console.log('[ListService] List created successfully:', list._id);
 
     // Log activity
     await logger.logActivity({

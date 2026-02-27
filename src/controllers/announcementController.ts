@@ -47,10 +47,7 @@ exports.createAnnouncement = async (req, res) => {
     const workspace = await Workspace.findById(workspaceId).populate({
       path: 'owner',
       populate: {
-        path: 'subscription',
-        populate: {
-          path: 'plan'
-        }
+        path: 'subscription.planId'
       }
     });
     
@@ -76,26 +73,53 @@ exports.createAnnouncement = async (req, res) => {
 
     // Check announcement cooldown based on workspace owner's plan
     const ownerSubscription = workspace.owner.subscription;
-    const plan = ownerSubscription?.plan;
-    const announcementCooldown = plan?.features?.announcementCooldown || 24; // Default 24 hours
+    const plan = ownerSubscription?.planId;
+    const announcementCooldown = plan?.features?.announcementCooldown ?? 24; // Default 24 hours
+
+    console.log('[Announcement] Cooldown check:', {
+      workspaceId,
+      ownerSubscription,
+      plan: plan ? { name: plan.name, features: plan.features } : null,
+      announcementCooldown,
+      lastAnnouncementTime: workspace.lastAnnouncementTime
+    });
 
     if (workspace.lastAnnouncementTime) {
       const currentTime = new Date();
       const timeSinceLastAnnouncement = (currentTime.getTime() - workspace.lastAnnouncementTime.getTime()) / (1000 * 60 * 60); // Convert to hours
 
+      console.log('[Announcement] Time since last announcement:', timeSinceLastAnnouncement, 'hours');
+
       if (timeSinceLastAnnouncement < announcementCooldown) {
         const hoursRemaining = Math.ceil(announcementCooldown - timeSinceLastAnnouncement);
+        
+        console.log('[Announcement] Cooldown active, hours remaining:', hoursRemaining);
+        
+        // Dynamic message based on cooldown period
+        let cooldownMessage;
+        if (announcementCooldown === 1) {
+          cooldownMessage = `Announcement cooldown active. You can post one announcement per hour on your current plan. Please wait ${hoursRemaining} more hour(s) or upgrade your plan for more frequent announcements.`;
+        } else if (announcementCooldown < 24) {
+          cooldownMessage = `Announcement cooldown active. You can post one announcement every ${announcementCooldown} hours on your current plan. Please wait ${hoursRemaining} more hour(s) or upgrade your plan for more frequent announcements.`;
+        } else {
+          cooldownMessage = `Announcement cooldown active. You can post one announcement every ${announcementCooldown} hours (${Math.floor(announcementCooldown / 24)} day(s)) on your current plan. Please wait ${hoursRemaining} more hour(s) or upgrade your plan for more frequent announcements.`;
+        }
+        
         return res.status(429).json({
           success: false,
-          message: `Announcement cooldown active. You can post one announcement every ${announcementCooldown} hours on your current plan. Please wait ${hoursRemaining} more hour(s) or upgrade your plan for more frequent announcements.`,
+          message: cooldownMessage,
           code: 'ANNOUNCEMENT_COOLDOWN',
           cooldownHours: announcementCooldown,
           hoursRemaining: hoursRemaining,
+          lastAnnouncementTime: workspace.lastAnnouncementTime,
+          nextAllowedTime: new Date(workspace.lastAnnouncementTime.getTime() + (announcementCooldown * 60 * 60 * 1000)),
           action: 'upgrade',
           feature: 'announcements'
         });
       }
     }
+
+    console.log('[Announcement] Cooldown check passed, creating announcement');
 
     const announcement = await Announcement.create({
       content: content.trim(),
@@ -106,6 +130,12 @@ exports.createAnnouncement = async (req, res) => {
     // Update workspace lastAnnouncementTime
     workspace.lastAnnouncementTime = new Date();
     await workspace.save();
+
+    console.log('[Announcement] Created successfully:', {
+      announcementId: announcement._id,
+      workspaceId,
+      lastAnnouncementTime: workspace.lastAnnouncementTime
+    });
 
     const populatedAnnouncement = await Announcement.findById(announcement._id)
       .populate('author', 'name email avatar')

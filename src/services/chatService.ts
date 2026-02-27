@@ -142,16 +142,16 @@ class ChatService {
     // Get total count
     const total = await ChatMessage.countDocuments(query);
 
-    // Get messages
+    // Get messages sorted by newest first
     const messages = await ChatMessage.find(query)
       .populate("sender", "name email")
       .populate("mentions", "name email")
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1 }) // Newest first
       .skip(skip)
       .limit(limit)
       .lean();
 
-    // Reverse to show oldest first in the page
+    // Reverse to show oldest first within the page (for chronological display)
     messages.reverse();
 
     return {

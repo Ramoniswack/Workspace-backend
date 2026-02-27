@@ -1,14 +1,22 @@
 const { z } = require("zod");
 
 const registerDeviceSchema = z.object({
-  token: z.string().min(1, "Device token is required"),
-  platform: z.enum(["web", "android", "ios"], {
-    errorMap: () => ({ message: "Platform must be web, android, or ios" }),
+  body: z.object({
+    token: z.string().min(1, "Device token is required"),
+    platform: z.enum(["web", "android", "ios"], {
+      errorMap: () => ({ message: "Platform must be web, android, or ios" }),
+    }),
   }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional()
 });
 
 const unregisterDeviceSchema = z.object({
-  token: z.string().min(1, "Device token is required"),
+  body: z.object({
+    token: z.string().min(1, "Device token is required"),
+  }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional()
 });
 
 module.exports = {
