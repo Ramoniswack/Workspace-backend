@@ -55,7 +55,7 @@ const workspaceSchema = new mongoose.Schema(
         status: {
           type: String,
           enum: ["active", "inactive"],
-          default: "inactive"
+          default: "active"  // Changed from "inactive" to "active"
         }
       }
     ],

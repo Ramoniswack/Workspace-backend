@@ -26,19 +26,60 @@ const getWorkspaceMembers = asyncHandler(
       return next(new AppError("Workspace not found", 404));
     }
 
-    // Format response - only return ACTIVE members
+    console.log('[MemberController] Workspace found:', {
+      name: workspace.name,
+      owner: workspace.owner,
+      totalMembers: workspace.members.length,
+      membersData: workspace.members.map((m: any) => ({
+        userId: m.user?._id || m.user,
+        role: m.role,
+        status: m.status,
+        hasUserData: !!m.user?.name
+      }))
+    });
+
+    // Format response - only return ACTIVE members (or members without status field for backwards compatibility)
     const members = workspace.members
-      .filter((member: any) => member.status === 'active')
+      .filter((member: any) => {
+        const isActive = !member.status || member.status === 'active';
+        console.log('[MemberController] Filtering member:', {
+          userId: member.user?._id || member.user,
+          status: member.status,
+          isActive
+        });
+        return isActive;
+      })
       .map((member: any) => ({
         _id: member.user._id,
         name: member.user.name,
         email: member.user.email,
         role: member.role,
-        status: member.status,
+        status: member.status || 'active',
         isOwner: workspace.owner.toString() === member.user._id.toString(),
       }));
 
-    console.log('[MemberController] Active members retrieved', { count: members.length });
+    console.log('[MemberController] Active members retrieved', { 
+      count: members.length,
+      totalMembers: workspace.members.length,
+      members: members.map(m => ({ id: m._id, name: m.name, role: m.role }))
+    });
+
+    // If no members found but workspace has an owner, include the owner
+    if (members.length === 0 && workspace.owner) {
+      console.log('[MemberController] No members found, fetching owner');
+      const owner = await User.findById(workspace.owner).select('name email');
+      if (owner) {
+        members.push({
+          _id: owner._id,
+          name: owner.name,
+          email: owner.email,
+          role: 'owner',
+          status: 'active',
+          isOwner: true,
+        });
+        console.log('[MemberController] Added owner to members list');
+      }
+    }
 
     res.status(200).json({
       success: true,

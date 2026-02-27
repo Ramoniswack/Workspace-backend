@@ -223,7 +223,8 @@ class InvitationService {
         $push: {
           members: {
             user: userId,
-            role: invitation.role
+            role: invitation.role,
+            status: "active"  // Explicitly set status to active
           }
         }
       },
