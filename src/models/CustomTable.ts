@@ -72,7 +72,12 @@ const customTableSchema = new mongoose.Schema(
         },
         colors: {
           type: Map,
-          of: String, // hex color strings
+          of: String, // hex color strings for background
+          default: {}
+        },
+        textColors: {
+          type: Map,
+          of: String, // hex color strings for text
           default: {}
         }
       }
@@ -94,7 +99,8 @@ const customTableSchema = new mongoose.Schema(
           ret.rows = ret.rows.map((row: any) => ({
             ...row,
             data: row.data instanceof Map ? Object.fromEntries(row.data) : row.data,
-            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors
+            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors,
+            textColors: row.textColors instanceof Map ? Object.fromEntries(row.textColors) : row.textColors
           }));
         }
         return ret;
@@ -107,7 +113,8 @@ const customTableSchema = new mongoose.Schema(
           ret.rows = ret.rows.map((row: any) => ({
             ...row,
             data: row.data instanceof Map ? Object.fromEntries(row.data) : row.data,
-            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors
+            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors,
+            textColors: row.textColors instanceof Map ? Object.fromEntries(row.textColors) : row.textColors
           }));
         }
         return ret;

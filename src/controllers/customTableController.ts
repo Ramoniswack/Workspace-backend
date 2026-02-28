@@ -647,6 +647,48 @@ const updateCellColor = asyncHandler(async (req: AuthRequest, res: Response, nex
   }
 });
 
+// @desc    Update cell text color
+// @route   PATCH /api/tables/:tableId/rows/:rowId/text-colors/:columnId
+// @access  Private (Requires EDIT or FULL permission)
+const updateCellTextColor = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const { tableId, rowId, columnId } = req.params;
+  const { color } = req.body;
+
+  // Validate hex color format if color is provided
+  if (color !== null && color !== undefined) {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid color format. Must be in hexadecimal format (#RRGGBB)"
+      });
+    }
+  }
+
+  // Check if user has EDIT or FULL permission
+  const { hasAccess } = await checkTablePermission(tableId, req.user!.id, 'EDIT');
+  
+  if (!hasAccess) {
+    return res.status(403).json({
+      success: false,
+      message: "You do not have permission to edit cells in this table"
+    });
+  }
+
+  try {
+    const updatedTable = await customTableService.updateCellTextColor(tableId, rowId, columnId, color);
+
+    res.status(200).json({
+      success: true,
+      data: updatedTable
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update cell text color"
+    });
+  }
+});
+
 // @desc    Export table to Excel
 // @route   GET /api/tables/:tableId/export
 // @access  Private
@@ -697,6 +739,7 @@ module.exports = {
   deleteRow,
   updateCell,
   updateCellColor,
+  updateCellTextColor,
   exportTable
 };
 

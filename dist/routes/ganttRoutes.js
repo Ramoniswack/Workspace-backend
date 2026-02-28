@@ -1,19 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const express = require("express");
 const ganttController = require("../controllers/ganttController");
 const { protect } = require("../middlewares/authMiddleware");
-
 /**
  * @swagger
  * tags:
  *   name: Gantt
  *   description: Gantt chart and timeline management
  */
-
 const router = express.Router();
-
 // All routes require authentication
 router.use(protect);
-
 /**
  * @swagger
  * /api/gantt/tasks/{taskId}/update-timeline:
@@ -49,7 +47,6 @@ router.use(protect);
  *         description: Authentication required
  */
 router.post("/tasks/:taskId/update-timeline", ganttController.updateTaskTimeline);
-
 /**
  * @swagger
  * /api/gantt/spaces/{spaceId}:
@@ -72,7 +69,6 @@ router.post("/tasks/:taskId/update-timeline", ganttController.updateTaskTimeline
  *         description: Authentication required
  */
 router.get("/spaces/:spaceId", ganttController.getGanttData);
-
 /**
  * @swagger
  * /api/gantt/tasks/{taskId}/validate:
@@ -95,7 +91,6 @@ router.get("/spaces/:spaceId", ganttController.getGanttData);
  *         description: Authentication required
  */
 router.get("/tasks/:taskId/validate", ganttController.validateTimeline);
-
 /**
  * @swagger
  * /api/gantt/tasks/{taskId}/toggle-milestone:
@@ -118,7 +113,4 @@ router.get("/tasks/:taskId/validate", ganttController.validateTimeline);
  *         description: Authentication required
  */
 router.post("/tasks/:taskId/toggle-milestone", ganttController.toggleMilestone);
-
 module.exports = router;
-
-export {};

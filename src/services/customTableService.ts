@@ -384,6 +384,54 @@ class CustomTableService {
     }
 
     /**
+     * Update cell text color
+     * @param tableId - The table ID
+     * @param rowId - The row ID
+     * @param columnId - The column ID
+     * @param color - Hex color string or null to remove
+     * @returns Updated table
+     */
+    async updateCellTextColor(
+        tableId: string,
+        rowId: string,
+        columnId: string,
+        color: string | null
+    ): Promise<any> {
+        try {
+            const table = await CustomTable.findById(tableId);
+            if (!table) {
+                throw new Error('Table not found');
+            }
+
+            const row = table.rows.find((r: any) => r.id === rowId);
+            if (!row) {
+                throw new Error('Row not found');
+            }
+
+            if (color === null) {
+                row.textColors.delete(columnId);
+            } else {
+                // Validate hex color format
+                if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                    throw new Error('Invalid color format. Must be hexadecimal (#RRGGBB)');
+                }
+                row.textColors.set(columnId, color);
+            }
+
+            // Mark the path as modified to ensure Mongoose saves it
+            table.markModified('rows');
+            
+            await table.save();
+
+            console.log(`[CustomTableService] Updated cell text color in table ${tableId}, row ${rowId}, column ${columnId}`);
+            return table;
+        } catch (error) {
+            console.error(`[CustomTableService] Error updating cell text color:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Soft delete a table
      * @param tableId - The table ID
      * @param userId - The user deleting the table

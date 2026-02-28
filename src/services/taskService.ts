@@ -11,7 +11,6 @@ const socketService = require("./socketService").default;
 const enhancedNotificationService = require("./enhancedNotificationService");
 const customFieldService = require("./customFieldService");
 const taskDependencyService = require("./taskDependencyService");
-const ganttService = require("./ganttService");
 
 interface CreateTaskData {
   title: string;
@@ -371,12 +370,6 @@ class TaskService {
     const assigneeChanged = updateData.assignee !== undefined && updateData.assignee !== task.assignee?.toString();
     const oldAssignee = task.assignee?.toString();
 
-    // Capture old dates for Gantt auto-scheduling
-    const oldStartDate = task.startDate;
-    const oldDueDate = task.dueDate;
-    const datesChanged = (updateData.startDate !== undefined && updateData.startDate !== oldStartDate) ||
-                         (updateData.dueDate !== undefined && updateData.dueDate !== oldDueDate);
-
     if (updateData.title) task.title = updateData.title;
     if (updateData.description !== undefined) task.description = updateData.description;
     if (updateData.status) {
@@ -447,28 +440,6 @@ class TaskService {
         description: task.description,
       }
     );
-
-    // Gantt Auto-Scheduling: If dates changed, cascade to dependent tasks
-    if (datesChanged) {
-      try {
-        let dateDelta = 0;
-
-        if (updateData.startDate && oldStartDate) {
-          dateDelta = ganttService.calculateDateDelta(oldStartDate, new Date(updateData.startDate));
-        } else if (updateData.dueDate && oldDueDate) {
-          dateDelta = ganttService.calculateDateDelta(oldDueDate, new Date(updateData.dueDate));
-        }
-
-        if (dateDelta !== 0) {
-          // Cascade timeline changes to dependent tasks
-          await ganttService.updateTaskTimeline(taskId, dateDelta, userId);
-          console.log(`[Task] Cascaded timeline changes for task ${taskId}, delta: ${dateDelta}ms`);
-        }
-      } catch (error) {
-        console.error("[Task] Failed to cascade timeline changes:", error);
-        // Don't fail the update if cascade fails
-      }
-    }
 
     // Log audit
     await logger.logAudit({

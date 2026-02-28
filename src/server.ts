@@ -69,7 +69,6 @@ const startServer = async () => {
     const taskDependencyRoutes = require("./routes/taskDependencyRoutes");
     const timeEntryRoutes = require("./routes/timeEntryRoutes");
     const recurringRoutes = require("./routes/recurringRoutes");
-    const ganttRoutes = require("./routes/ganttRoutes");
     const analyticsRoutes = require("./routes/analyticsRoutes");
     const attachmentRoutes = require("./routes/attachmentRoutes");
     const activityRoutes = require("./routes/activityRoutes");
@@ -172,7 +171,6 @@ const startServer = async () => {
     app.use("/api/task-dependencies", taskDependencyRoutes);
     app.use("/api/time", timeEntryRoutes);
     app.use("/api/recurring", recurringRoutes);
-    app.use("/api/gantt", ganttRoutes);
     app.use("/api/analytics", analyticsRoutes);
     app.use("/api", attachmentRoutes);
     app.use("/api", activityRoutes);

@@ -12,6 +12,7 @@ const {
   deleteRow,
   updateCell,
   updateCellColor,
+  updateCellTextColor,
   exportTable
 } = require("../controllers/customTableController");
 const { protect } = require("../middlewares/authMiddleware");
@@ -618,6 +619,69 @@ tableRouter.patch(
   requirePermission("UPDATE_SPACE"),
   cellUpdateLimiter,
   updateCellColor
+);
+
+/**
+ * @swagger
+ * /api/tables/{tableId}/rows/{rowId}/text-colors/{columnId}:
+ *   patch:
+ *     summary: Update cell text color
+ *     description: Update a cell's text color with hex format validation
+ *     tags: [Custom Tables]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tableId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Table ID
+ *       - in: path
+ *         name: rowId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Row ID
+ *       - in: path
+ *         name: columnId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Column ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - color
+ *             properties:
+ *               color:
+ *                 type: string
+ *                 nullable: true
+ *                 pattern: '^#[0-9A-Fa-f]{6}$'
+ *                 description: Hex color code (#RRGGBB) or null to remove color
+ *                 example: '#000000'
+ *     responses:
+ *       200:
+ *         description: Cell text color updated successfully
+ *       400:
+ *         description: Invalid color format
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Insufficient permissions
+ *       404:
+ *         description: Table, row, or column not found
+ */
+tableRouter.patch(
+  "/:tableId/rows/:rowId/text-colors/:columnId",
+  protect,
+  requirePermission("UPDATE_SPACE"),
+  cellUpdateLimiter,
+  updateCellTextColor
 );
 
 /**
