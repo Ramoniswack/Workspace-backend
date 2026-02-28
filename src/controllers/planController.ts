@@ -174,7 +174,7 @@ const updatePlan = asyncHandler(async (req: any, res: any) => {
 });
 
 /**
- * @desc    Delete a plan (soft delete by setting isActive to false)
+ * @desc    Delete a plan
  * @route   DELETE /api/plans/:id
  * @access  Private (Super User only)
  */
@@ -192,14 +192,27 @@ const deletePlan = asyncHandler(async (req: any, res: any) => {
     throw new Error("Plan not found");
   }
 
-  // Soft delete by setting isActive to false
-  plan.isActive = false;
-  await plan.save();
+  // Prevent deletion of Free plan
+  if (plan.name.toLowerCase() === 'free' || plan.name.toLowerCase() === 'free plan') {
+    res.status(400);
+    throw new Error("Cannot delete the Free plan");
+  }
+
+  // Check if any users are subscribed to this plan
+  const User = require("../models/User");
+  const subscribedUsers = await User.countDocuments({ 'subscription.planId': req.params.id });
+
+  if (subscribedUsers > 0) {
+    res.status(400);
+    throw new Error(`Cannot delete plan. ${subscribedUsers} user(s) are currently subscribed to this plan.`);
+  }
+
+  // Delete the plan
+  await Plan.findByIdAndDelete(req.params.id);
 
   res.status(200).json({
     success: true,
-    message: "Plan deactivated successfully",
-    data: plan
+    message: "Plan deleted successfully"
   });
 });
 

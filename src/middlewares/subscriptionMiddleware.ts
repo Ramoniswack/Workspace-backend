@@ -45,30 +45,40 @@ const checkSubscriptionLimit = async (req: AuthRequest, res: Response, next: Nex
       });
     }
 
-    // If user has no subscription, treat as free/basic plan
+    // If user has no subscription, treat as free plan
     if (!user.subscription) {
       user.subscription = {
         isPaid: false,
-        status: 'trial',
-        trialStartedAt: user.createdAt
+        status: 'free'
       };
     }
 
-    // Check if trial has expired (30 days)
-    const trialDuration = 30; // 30 days
-    const trialStartDate = new Date(user.subscription.trialStartedAt || user.createdAt);
-    const daysSinceStart = Math.floor(
-      (Date.now() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    const trialExpired = daysSinceStart > trialDuration;
+    // Check if paid subscription has expired
+    let subscriptionExpired = false;
+    let daysRemaining = 0;
+    
+    if (user.subscription.isPaid && user.subscription.expiresAt) {
+      const expiryDate = new Date(user.subscription.expiresAt);
+      const now = new Date();
+      const timeDiff = expiryDate.getTime() - now.getTime();
+      daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+      subscriptionExpired = daysRemaining <= 0;
+      
+      // Auto-deactivate expired subscriptions
+      if (subscriptionExpired && user.subscription.status === 'active') {
+        user.subscription.status = 'expired';
+        user.subscription.isPaid = false;
+        await user.save();
+      }
+    }
 
-    // If trial expired and not paid, restrict access
-    if (trialExpired && !user.subscription.isPaid) {
+    // If subscription expired, restrict access to paid features
+    if (subscriptionExpired) {
       return res.status(403).json({
         success: false,
-        message: "Your free trial has ended. Upgrade your plan to continue accessing all features and unlock unlimited potential.",
-        code: "TRIAL_EXPIRED",
-        trialDaysRemaining: 0,
+        message: "Your subscription has expired. Upgrade your plan to continue accessing premium features.",
+        code: "SUBSCRIPTION_EXPIRED",
+        daysRemaining: 0,
         isPaid: false,
         action: "upgrade"
       });
@@ -79,8 +89,8 @@ const checkSubscriptionLimit = async (req: AuthRequest, res: Response, next: Nex
       isPaid: user.subscription.isPaid,
       status: user.subscription.status,
       plan: user.subscription.planId,
-      trialExpired,
-      trialDaysRemaining: Math.max(0, trialDuration - daysSinceStart)
+      subscriptionExpired,
+      daysRemaining: Math.max(0, daysRemaining)
     };
 
     next();
@@ -738,14 +748,24 @@ const getSubscriptionInfo = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Calculate trial info
-    const trialDuration = 30;
-    const trialStartDate = new Date(user.subscription?.trialStartedAt || user.createdAt);
-    const daysSinceStart = Math.floor(
-      (Date.now() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    const trialDaysRemaining = Math.max(0, trialDuration - daysSinceStart);
-    const trialExpired = daysSinceStart > trialDuration;
+    // Calculate subscription expiry info
+    let subscriptionExpired = false;
+    let daysRemaining = 0;
+    
+    if (user.subscription?.isPaid && user.subscription.expiresAt) {
+      const expiryDate = new Date(user.subscription.expiresAt);
+      const now = new Date();
+      const timeDiff = expiryDate.getTime() - now.getTime();
+      daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+      subscriptionExpired = daysRemaining <= 0;
+      
+      // Auto-deactivate expired subscriptions
+      if (subscriptionExpired && user.subscription.status === 'active') {
+        user.subscription.status = 'expired';
+        user.subscription.isPaid = false;
+        await user.save();
+      }
+    }
 
     // Get GLOBAL usage across all workspaces owned by this user
     const usage = await entitlementService.getTotalUsage(userId);
@@ -773,9 +793,10 @@ const getSubscriptionInfo = async (req: AuthRequest, res: Response) => {
       success: true,
       data: {
         isPaid: user.subscription?.isPaid || false,
-        status: user.subscription?.status || 'trial',
-        trialDaysRemaining,
-        trialExpired,
+        status: user.subscription?.status || 'free',
+        daysRemaining: Math.max(0, daysRemaining),
+        subscriptionExpired,
+        expiresAt: user.subscription?.expiresAt || null,
         plan: planDetails ? {
           _id: planDetails._id,
           name: planDetails.name,

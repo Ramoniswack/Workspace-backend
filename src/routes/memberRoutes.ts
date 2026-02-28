@@ -195,7 +195,7 @@ router.patch("/me/status", protect, requirePermission("VIEW_WORKSPACE"), updateM
  *         description: Member not found
  */
 router.patch("/:userId", protect, requirePermission("CHANGE_MEMBER_ROLE"), updateMemberRole);
-router.delete("/:userId", protect, requirePermission("REMOVE_MEMBER"), removeMember);
+router.delete("/:userId", protect, requirePermission("REMOVE_MEMBER"), require("../middlewares/ownerOnly"), removeMember);
 
 module.exports = router;
 

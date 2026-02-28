@@ -48,6 +48,28 @@ const getFolders = asyncHandler(async (req: AuthRequest, res: Response, next: Ne
   });
 });
 
+// @desc    Get single folder
+// @route   GET /api/folders/:id
+// @access  Private
+const getFolder = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  console.log('[FolderController] getFolder called', { folderId: req.params.id });
+  
+  const Folder = require("../models/Folder");
+  const folder = await Folder.findById(req.params.id);
+
+  if (!folder) {
+    res.status(404);
+    throw new Error("Folder not found");
+  }
+
+  console.log('[FolderController] Folder retrieved', { folderId: folder._id });
+
+  res.status(200).json({
+    success: true,
+    data: folder
+  });
+});
+
 // @desc    Update folder
 // @route   PUT /api/folders/:id
 // @access  Private
@@ -85,6 +107,7 @@ const deleteFolder = asyncHandler(async (req: AuthRequest, res: Response, next: 
 module.exports = {
   createFolder,
   getFolders,
+  getFolder,
   updateFolder,
   deleteFolder
 };

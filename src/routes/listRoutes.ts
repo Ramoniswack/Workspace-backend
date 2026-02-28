@@ -173,7 +173,7 @@ const listRouter = express.Router();
  *         description: List not found
  */
 listRouter.get("/:id", protect, requirePermission("VIEW_LIST"), getList);
-listRouter.patch("/:id", protect, requirePermission("UPDATE_LIST"), validate(updateListSchema), updateList);
+listRouter.patch("/:id", protect, requirePermission("UPDATE_LIST"), require("../middlewares/ownerOnly"), validate(updateListSchema), updateList);
 listRouter.delete("/:id", protect, requirePermission("DELETE_LIST"), deleteList);
 
 module.exports = { spaceListRouter, listRouter };

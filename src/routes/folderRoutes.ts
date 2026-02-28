@@ -2,6 +2,7 @@ const express = require("express");
 const {
   createFolder,
   getFolders,
+  getFolder,
   updateFolder,
   deleteFolder
 } = require("../controllers/folderController");
@@ -89,6 +90,26 @@ const folderRouter = express.Router();
 /**
  * @swagger
  * /api/folders/{id}:
+ *   get:
+ *     summary: Get folder
+ *     description: Get a single folder by ID
+ *     tags: [Folders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Folder ID
+ *     responses:
+ *       200:
+ *         description: Folder retrieved successfully
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: Folder not found
  *   put:
  *     summary: Update folder
  *     description: Update folder details
@@ -149,7 +170,8 @@ const folderRouter = express.Router();
  *       404:
  *         description: Folder not found
  */
-folderRouter.put("/:id", protect, requirePermission("UPDATE_FOLDER"), updateFolder);
+folderRouter.get("/:id", protect, requirePermission("VIEW_FOLDER"), getFolder);
+folderRouter.put("/:id", protect, requirePermission("UPDATE_FOLDER"), require("../middlewares/ownerOnly"), updateFolder);
 folderRouter.delete("/:id", protect, requirePermission("DELETE_FOLDER"), deleteFolder);
 
 module.exports = { spaceFolderRouter, folderRouter };

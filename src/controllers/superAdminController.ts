@@ -5,7 +5,7 @@ const SystemSettings = require("../models/SystemSettings");
 const asyncHandler = require("../utils/asyncHandler");
 
 /**
- * @desc    Get all workspace admins/owners with subscription details
+ * @desc    Get all users with subscription details
  * @route   GET /api/super-admin/users
  * @access  Private (Super User only)
  */
@@ -15,58 +15,51 @@ const getAdminUsers = asyncHandler(async (req: any, res: any) => {
     throw new Error("Access denied. Super user privileges required.");
   }
 
-  // Find all workspaces and get their owners
-  const workspaces = await Workspace.find({ isDeleted: false })
-    .populate("owner", "name email subscription createdAt")
-    .select("name owner");
+  // Get ALL users (not just workspace owners)
+  const allUsers = await User.find({ isSuperUser: { $ne: true } })
+    .select("name email subscription createdAt")
+    .sort({ createdAt: -1 });
 
-  // Get unique admin users
-  const adminUserIds = new Set();
   const adminUsers: any[] = [];
 
-  for (const workspace of workspaces) {
-    if (workspace.owner && !adminUserIds.has(workspace.owner._id.toString())) {
-      adminUserIds.add(workspace.owner._id.toString());
-      
-      const user = workspace.owner;
-      const workspaceCount = await Workspace.countDocuments({ 
-        owner: user._id, 
-        isDeleted: false 
-      });
+  for (const user of allUsers) {
+    // Count workspaces owned by this user
+    const workspaceCount = await Workspace.countDocuments({ 
+      owner: user._id, 
+      isDeleted: false 
+    });
 
-      // Calculate trial days remaining
-      let trialDaysRemaining = 0;
-      if (user.subscription?.status === 'trial' && user.subscription?.trialStartedAt) {
-        const trialDuration = 14; // 14 days trial
-        const daysSinceStart = Math.floor(
-          (Date.now() - new Date(user.subscription.trialStartedAt).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        trialDaysRemaining = Math.max(0, trialDuration - daysSinceStart);
-      }
-
-      // Get plan details if exists
-      let planDetails = null;
-      if (user.subscription?.planId) {
-        planDetails = await Plan.findById(user.subscription.planId);
-      }
-
-      adminUsers.push({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        workspaceCount,
-        subscription: {
-          planId: user.subscription?.planId || null,
-          planName: planDetails?.name || "No Plan",
-          planPrice: planDetails?.price || 0,
-          isPaid: user.subscription?.isPaid || false,
-          status: user.subscription?.status || "trial",
-          trialStartedAt: user.subscription?.trialStartedAt || user.createdAt,
-          trialDaysRemaining
-        },
-        createdAt: user.createdAt
-      });
+    // Calculate days remaining for paid users
+    let daysRemaining = undefined;
+    if (user.subscription?.isPaid && user.subscription?.expiresAt) {
+      const now = new Date();
+      const expiryDate = new Date(user.subscription.expiresAt);
+      const timeDiff = expiryDate.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
     }
+
+    // Get plan details if exists
+    let planDetails = null;
+    if (user.subscription?.planId) {
+      planDetails = await Plan.findById(user.subscription.planId);
+    }
+
+    adminUsers.push({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      workspaceCount,
+      subscription: {
+        planId: user.subscription?.planId || null,
+        planName: planDetails?.name || "Free Plan",
+        planPrice: planDetails?.price || 0,
+        isPaid: user.subscription?.isPaid || false,
+        status: user.subscription?.status || "free",
+        expiresAt: user.subscription?.expiresAt,
+        daysRemaining
+      },
+      createdAt: user.createdAt
+    });
   }
 
   res.status(200).json({
@@ -114,6 +107,15 @@ const updateUserSubscription = asyncHandler(async (req: any, res: any) => {
     user.subscription.isPaid = isPaid;
     if (isPaid) {
       user.subscription.status = 'active';
+      // Set 30-day expiry from now
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30);
+      user.subscription.expiresAt = expiryDate;
+      user.subscription.paidAt = new Date();
+    } else {
+      user.subscription.status = 'free';
+      user.subscription.expiresAt = undefined;
+      user.subscription.paidAt = undefined;
     }
   }
 
@@ -160,8 +162,7 @@ const getFinancialAnalytics = asyncHandler(async (req: any, res: any) => {
     }
   }
 
-  // Calculate conversion rate
-  const trialUsers = allUsers.filter(user => user.subscription?.status === 'trial');
+  // Calculate conversion rate (free to paid)
   const conversionRate = allUsers.length > 0 
     ? ((paidUsers.length / allUsers.length) * 100).toFixed(2)
     : "0";
@@ -215,7 +216,6 @@ const getFinancialAnalytics = asyncHandler(async (req: any, res: any) => {
       metrics: {
         totalUsers,
         paidUsers: paidUsers.length,
-        trialUsers: trialUsers.length,
         activeSubscriptions,
         expiredSubscriptions
       }

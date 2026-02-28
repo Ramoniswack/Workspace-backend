@@ -180,7 +180,7 @@ const spaceRouter = express.Router();
  *         description: Space not found
  */
 spaceRouter.get("/:id", protect, requirePermission("VIEW_SPACE"), getSpace);
-spaceRouter.patch("/:id", protect, requirePermission("UPDATE_SPACE"), validate(updateSpaceSchema), updateSpace);
+spaceRouter.patch("/:id", protect, requirePermission("UPDATE_SPACE"), require("../middlewares/ownerOnly"), validate(updateSpaceSchema), updateSpace);
 spaceRouter.delete("/:id", protect, requirePermission("DELETE_SPACE"), deleteSpace);
 
 /**

@@ -10,8 +10,9 @@ interface IUser extends Document {
   subscription?: {
     planId: mongoose.Types.ObjectId;
     isPaid: boolean;
-    trialStartedAt: Date;
-    status: 'trial' | 'active' | 'expired';
+    paidAt?: Date;
+    expiresAt?: Date;
+    status: 'free' | 'active' | 'expired';
   };
 }
 
@@ -35,14 +36,16 @@ const userSchema = new mongoose.Schema(
         type: Boolean,
         default: false
       },
-      trialStartedAt: {
-        type: Date,
-        default: Date.now
+      paidAt: {
+        type: Date
+      },
+      expiresAt: {
+        type: Date
       },
       status: {
         type: String,
-        enum: ['trial', 'active', 'expired'],
-        default: 'trial'
+        enum: ['free', 'active', 'expired'],
+        default: 'free'
       }
     }
   },

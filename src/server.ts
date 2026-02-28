@@ -207,6 +207,36 @@ const startServer = async () => {
         }
       });
       console.log("[Cron] Recurring task processor scheduled (runs every hour)");
+
+      // Initialize subscription expiry check cron job (runs every hour)
+      cron.schedule("0 * * * *", async () => {
+        console.log("[Cron] Checking for expired subscriptions...");
+        try {
+          const User = require("./models/User");
+          const now = new Date();
+          
+          // Find all active paid subscriptions that have expired
+          const expiredUsers = await User.find({
+            'subscription.isPaid': true,
+            'subscription.status': 'active',
+            'subscription.expiresAt': { $lte: now }
+          });
+
+          let expiredCount = 0;
+          for (const user of expiredUsers) {
+            user.subscription.status = 'expired';
+            user.subscription.isPaid = false;
+            await user.save();
+            expiredCount++;
+            console.log(`[Cron] Expired subscription for user: ${user.email}`);
+          }
+
+          console.log(`[Cron] Subscription check complete: ${expiredCount} subscriptions expired`);
+        } catch (error) {
+          console.error("[Cron] Error checking subscription expiry:", error);
+        }
+      });
+      console.log("[Cron] Subscription expiry checker scheduled (runs every hour)");
     });
     
     // Return for graceful shutdown
