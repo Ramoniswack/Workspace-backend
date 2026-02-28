@@ -347,6 +347,62 @@ class PermissionService {
   }
 
   /**
+   * Get user's table permission level (override)
+   * @param userId - User ID
+   * @param tableId - Table ID
+   * @returns Promise<TablePermissionLevel | null>
+   */
+  async getTablePermissionLevel(
+    userId: string,
+    tableId: string
+  ): Promise<string | null> {
+    try {
+      const { TableMember } = require("../models/TableMember");
+      const tableMember = await TableMember.findOne({
+        user: userId,
+        table: tableId
+      }).select("permissionLevel");
+
+      if (!tableMember) {
+        return null;
+      }
+
+      return tableMember.permissionLevel;
+    } catch (error) {
+      console.error("[PermissionService] Error getting table permission:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if user can access table (is assigned or is admin/owner)
+   * @param userId - User ID
+   * @param tableId - Table ID
+   * @param workspaceId - Workspace ID
+   * @returns Promise<boolean>
+   */
+  async canAccessTable(
+    userId: string,
+    tableId: string,
+    workspaceId: string
+  ): Promise<boolean> {
+    try {
+      // Check if user is admin or owner
+      const isAdminOrOwner = await this.isAdminOrOwner(userId, workspaceId);
+      if (isAdminOrOwner) {
+        return true;
+      }
+
+      // Check if user has table permission
+      const tablePermission = await this.getTablePermissionLevel(userId, tableId);
+      return tablePermission !== null;
+    } catch (error) {
+      console.error("[PermissionService] Error checking table access:", error);
+      return false;
+    }
+  }
+
+  /**
    * Check if user is workspace member
    * @param userId - User ID
    * @param workspaceId - Workspace ID

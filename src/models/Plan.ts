@@ -18,10 +18,19 @@ interface IPlan extends Document {
     messageLimit: number;
     announcementCooldown: number;
     accessControlTier: 'none' | 'basic' | 'pro' | 'advanced';
+    // Custom Roles (Pro Feature)
     canUseCustomRoles: boolean;
+    maxCustomRoles: number;
+    // Custom Tables (Pro Feature)
     canCreateTables: boolean;
     maxTablesCount: number;
     maxRowsLimit: number;
+    maxColumnsLimit: number;
+    // Files & Documents (Pro Feature)
+    maxFiles: number;
+    maxDocuments: number;
+    // Direct Messages (Pro Feature)
+    maxDirectMessagesPerUser: number;
   };
   isActive: boolean;
   createdAt: Date;
@@ -122,27 +131,61 @@ const planSchema = new mongoose.Schema(
         required: true,
         default: 'none'
       },
+      // Custom Roles (Pro Feature)
       canUseCustomRoles: {
         type: Boolean,
-        required: true,
+        required: false,
         default: false
       },
+      maxCustomRoles: {
+        type: Number,
+        required: false,
+        min: -1, // -1 means unlimited
+        default: -1
+      },
+      // Custom Tables (Pro Feature)
       canCreateTables: {
         type: Boolean,
-        required: true,
+        required: false,
         default: false
       },
       maxTablesCount: {
         type: Number,
-        required: true,
+        required: false,
         min: -1, // -1 means unlimited
-        default: 0
+        default: -1
       },
       maxRowsLimit: {
         type: Number,
-        required: true,
+        required: false,
         min: -1, // -1 means unlimited
-        default: 0
+        default: -1
+      },
+      maxColumnsLimit: {
+        type: Number,
+        required: false,
+        min: -1, // -1 means unlimited
+        default: -1
+      },
+      // Files & Documents (Pro Feature)
+      maxFiles: {
+        type: Number,
+        required: false,
+        min: -1, // -1 means unlimited
+        default: -1
+      },
+      maxDocuments: {
+        type: Number,
+        required: false,
+        min: -1, // -1 means unlimited
+        default: -1
+      },
+      // Direct Messages (Pro Feature)
+      maxDirectMessagesPerUser: {
+        type: Number,
+        required: false,
+        min: -1, // -1 means unlimited
+        default: -1
       }
     },
     isActive: {

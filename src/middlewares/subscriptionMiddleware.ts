@@ -734,6 +734,256 @@ const checkFolderLimit = async (req: AuthRequest, res: Response, next: NextFunct
 };
 
 /**
+ * Check custom table creation limit based on plan (GLOBAL across all workspaces owned by workspace owner)
+ */
+const checkTableLimit = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    console.log('[checkTableLimit] Starting table limit check');
+    
+    // Super users bypass all limits
+    if (req.user?.isSuperUser) {
+      console.log('[checkTableLimit] Super user detected, bypassing limit');
+      return next();
+    }
+
+    // Get space ID from params
+    const spaceId = req.params?.spaceId;
+    console.log('[checkTableLimit] Space ID:', spaceId);
+
+    if (!spaceId) {
+      console.log('[checkTableLimit] No space ID found');
+      return res.status(400).json({
+        success: false,
+        message: "Space ID required"
+      });
+    }
+
+    // Get space to find workspace
+    const Space = require("../models/Space");
+    const space = await Space.findById(spaceId).select('workspace').lean();
+    if (!space) {
+      console.log('[checkTableLimit] Space not found');
+      return res.status(404).json({
+        success: false,
+        message: "Space not found"
+      });
+    }
+
+    console.log('[checkTableLimit] Found space, workspace ID:', space.workspace);
+
+    // Get workspace owner
+    const ownerId = await entitlementService.getWorkspaceOwner(space.workspace.toString());
+    console.log('[checkTableLimit] Workspace owner ID:', ownerId);
+
+    // Get owner's subscription
+    const owner = await User.findById(ownerId).populate('subscription.planId');
+    if (!owner) {
+      console.log('[checkTableLimit] Owner not found');
+      return res.status(404).json({
+        success: false,
+        message: "Workspace owner not found"
+      });
+    }
+
+    // Get GLOBAL usage for the workspace owner
+    const usage = await entitlementService.getTotalUsage(ownerId);
+    console.log('[checkTableLimit] Current usage:', usage);
+
+    // Get plan limits from OWNER's subscription
+    let maxTables = 0; // Fallback if no plan found
+    let canCreateTables = false;
+    let planName = 'Free (Default)';
+    
+    if (owner.subscription?.isPaid && owner.subscription.planId) {
+      // Paid user - use their plan with inheritance resolution
+      const plan = owner.subscription.planId;
+      const PlanInheritanceService = require("../services/planInheritanceService").default;
+      const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+      canCreateTables = resolvedFeatures.canCreateTables ?? false;
+      maxTables = resolvedFeatures.maxTablesCount ?? 0;
+      planName = plan.name;
+      console.log('[checkTableLimit] Paid plan found:', planName, 'canCreateTables:', canCreateTables, 'maxTables:', maxTables);
+    } else {
+      // Free user - try to find a free plan in database
+      const Plan = require("../models/Plan");
+      const freePlan = await Plan.findOne({ 
+        name: { $regex: /free/i }, 
+        isActive: true 
+      }).lean();
+      
+      if (freePlan) {
+        canCreateTables = freePlan.features?.canCreateTables ?? false;
+        maxTables = freePlan.features?.maxTablesCount ?? 0;
+        planName = freePlan.name;
+        console.log('[checkTableLimit] Free plan found in database:', planName, 'canCreateTables:', canCreateTables, 'maxTables:', maxTables);
+      } else {
+        console.log('[checkTableLimit] No plan found, using hardcoded fallback');
+      }
+    }
+
+    // Check if feature is enabled
+    if (!canCreateTables) {
+      console.log('[checkTableLimit] Custom tables feature not enabled');
+      return res.status(403).json({
+        success: false,
+        message: "Custom tables are not available in your current plan. Upgrade to Pro or Enterprise to unlock this feature.",
+        code: "TABLES_FEATURE_UNAVAILABLE",
+        isPaid: owner.subscription?.isPaid || false,
+        action: "upgrade",
+        feature: "tables"
+      });
+    }
+
+    console.log('[checkTableLimit] Max tables allowed:', maxTables);
+    console.log('[checkTableLimit] Current table count:', usage.totalTables);
+
+    // Check if limit reached (-1 means unlimited)
+    if (maxTables !== -1 && usage.totalTables >= maxTables) {
+      console.log('[checkTableLimit] Table limit reached!');
+      return res.status(403).json({
+        success: false,
+        message: `You've reached your table limit (${maxTables} tables). Upgrade your plan to create more tables and organize your data better.`,
+        code: "TABLE_LIMIT_REACHED",
+        currentCount: usage.totalTables,
+        maxAllowed: maxTables,
+        isPaid: owner.subscription?.isPaid || false,
+        action: "upgrade",
+        feature: "tables"
+      });
+    }
+
+    console.log('[checkTableLimit] Limit check passed, proceeding');
+    next();
+  } catch (error: any) {
+    console.error("[Table Limit] Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error checking table limit"
+    });
+  }
+};
+
+const checkRowLimit = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    console.log('[checkRowLimit] Starting row limit check');
+    
+    // Super users bypass all limits
+    if (req.user?.isSuperUser) {
+      console.log('[checkRowLimit] Super user detected, bypassing limit');
+      return next();
+    }
+
+    // Get table ID from params
+    const tableId = req.params?.tableId;
+    console.log('[checkRowLimit] Table ID:', tableId);
+
+    if (!tableId) {
+      console.log('[checkRowLimit] No table ID found');
+      return res.status(400).json({
+        success: false,
+        message: "Table ID required"
+      });
+    }
+
+    // Get table to find space and workspace
+    const CustomTable = require("../models/CustomTable");
+    const table = await CustomTable.findById(tableId).select('spaceId').lean();
+    if (!table) {
+      console.log('[checkRowLimit] Table not found');
+      return res.status(404).json({
+        success: false,
+        message: "Table not found"
+      });
+    }
+
+    // Get space to find workspace
+    const Space = require("../models/Space");
+    const space = await Space.findById(table.spaceId).select('workspace').lean();
+    if (!space) {
+      console.log('[checkRowLimit] Space not found');
+      return res.status(404).json({
+        success: false,
+        message: "Space not found"
+      });
+    }
+
+    console.log('[checkRowLimit] Found space, workspace ID:', space.workspace);
+
+    // Get workspace owner
+    const ownerId = await entitlementService.getWorkspaceOwner(space.workspace.toString());
+    console.log('[checkRowLimit] Workspace owner ID:', ownerId);
+
+    // Get owner's subscription
+    const owner = await User.findById(ownerId).populate('subscription.planId');
+    if (!owner) {
+      console.log('[checkRowLimit] Owner not found');
+      return res.status(404).json({
+        success: false,
+        message: "Workspace owner not found"
+      });
+    }
+
+    // Get GLOBAL usage for the workspace owner
+    const usage = await entitlementService.getTotalUsage(ownerId);
+    console.log('[checkRowLimit] Current usage:', usage);
+
+    // Get plan limits from OWNER's subscription
+    let maxRows = 0; // Fallback if no plan found
+    let planName = 'Free (Default)';
+    
+    if (owner.subscription?.isPaid && owner.subscription.planId) {
+      // Paid user - use their plan
+      const plan = owner.subscription.planId;
+      maxRows = plan.features?.maxRowsLimit ?? 0;
+      planName = plan.name;
+      console.log('[checkRowLimit] Paid plan found:', planName, 'maxRows:', maxRows);
+    } else {
+      // Free user - try to find a free plan in database
+      const Plan = require("../models/Plan");
+      const freePlan = await Plan.findOne({ 
+        name: { $regex: /free/i }, 
+        isActive: true 
+      }).lean();
+      
+      if (freePlan) {
+        maxRows = freePlan.features?.maxRowsLimit ?? 0;
+        planName = freePlan.name;
+        console.log('[checkRowLimit] Free plan found in database:', planName, 'maxRows:', maxRows);
+      } else {
+        console.log('[checkRowLimit] No plan found, using hardcoded fallback');
+      }
+    }
+
+    console.log('[checkRowLimit] Max rows allowed:', maxRows);
+    console.log('[checkRowLimit] Current row count:', usage.totalRows);
+
+    // Check if limit reached (-1 or 0 means unlimited)
+    if (maxRows > 0 && usage.totalRows >= maxRows) {
+      console.log('[checkRowLimit] Row limit reached!');
+      return res.status(403).json({
+        success: false,
+        message: `You've reached your row limit (${maxRows} rows). Upgrade your plan to add more rows to your tables.`,
+        code: "ROW_LIMIT_REACHED",
+        currentCount: usage.totalRows,
+        maxAllowed: maxRows,
+        isPaid: owner.subscription?.isPaid || false,
+        action: "upgrade",
+        feature: "rows"
+      });
+    }
+
+    console.log('[checkRowLimit] Limit check passed, proceeding');
+    next();
+  } catch (error: any) {
+    console.error("[Row Limit] Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error checking row limit"
+    });
+  }
+};
+
+/**
  * Get user's subscription info (for frontend) - with GLOBAL usage
  */
 const getSubscriptionInfo = async (req: AuthRequest, res: Response) => {
@@ -830,6 +1080,8 @@ module.exports = {
   checkSpaceLimit,
   checkListLimit,
   checkFolderLimit,
+  checkTableLimit,
+  checkRowLimit,
   getSubscriptionInfo
 };
 

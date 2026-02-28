@@ -9,6 +9,7 @@ declare global {
         name?: string;
         isSuperUser?: boolean;
       };
+      workspace?: any;
     }
   }
 }
@@ -20,4 +21,5 @@ export interface AuthRequest extends Request {
     name?: string;
     isSuperUser?: boolean;
   };
+  workspace?: any;
 }

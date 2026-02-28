@@ -86,7 +86,33 @@ const customTableSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+      transform: function(doc, ret) {
+        // Convert Maps to plain objects for JSON serialization
+        if (ret.rows) {
+          ret.rows = ret.rows.map((row: any) => ({
+            ...row,
+            data: row.data instanceof Map ? Object.fromEntries(row.data) : row.data,
+            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors
+          }));
+        }
+        return ret;
+      }
+    },
+    toObject: {
+      transform: function(doc, ret) {
+        // Convert Maps to plain objects for toObject() calls
+        if (ret.rows) {
+          ret.rows = ret.rows.map((row: any) => ({
+            ...row,
+            data: row.data instanceof Map ? Object.fromEntries(row.data) : row.data,
+            colors: row.colors instanceof Map ? Object.fromEntries(row.colors) : row.colors
+          }));
+        }
+        return ret;
+      }
+    }
   }
 );
 

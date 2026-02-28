@@ -52,6 +52,7 @@ const getListMembers = asyncHandler(
           email: member.user.email,
           avatar: member.user.avatar,
           workspaceRole: member.role,
+          customRoleTitle: member.customRoleTitle || null,
           listPermissionLevel: override?.permissionLevel || null,
           hasOverride: !!override,
           addedBy: override?.addedBy?.name || null,

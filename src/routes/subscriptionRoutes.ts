@@ -66,6 +66,68 @@ const router = express.Router();
  */
 router.get("/info", protect, getSubscriptionInfo);
 
+/**
+ * @route   GET /api/subscription/next-plan
+ * @desc    Get the next available higher-tier plan
+ * @access  Private
+ */
+router.get("/next-plan", protect, async (req: any, res: any) => {
+  try {
+    const Plan = require("../models/Plan");
+    const Workspace = require("../models/Workspace");
+    
+    // Get user's current workspace
+    const workspace = await Workspace.findOne({
+      'members.user': req.user.id
+    }).populate('subscription.plan');
+    
+    if (!workspace) {
+      return res.status(404).json({
+        success: false,
+        message: "Workspace not found"
+      });
+    }
+    
+    const currentPlan = workspace.subscription?.plan;
+    const currentPrice = currentPlan?.price || 0;
+    
+    // Find the next higher-priced plan
+    const nextPlan = await Plan.findOne({
+      price: { $gt: currentPrice },
+      isActive: true
+    }).sort({ price: 1 }).limit(1);
+    
+    if (!nextPlan) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          hasNextPlan: false,
+          nextPlan: null
+        }
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        hasNextPlan: true,
+        nextPlan: {
+          _id: nextPlan._id,
+          name: nextPlan.name,
+          price: nextPlan.price,
+          features: nextPlan.features
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('[getNextPlan] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch next plan"
+    });
+  }
+});
+
 module.exports = router;
 
 export {};

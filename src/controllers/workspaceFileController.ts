@@ -1,5 +1,7 @@
 const workspaceFileService = require("../services/workspaceFileService");
 const asyncHandler = require("../utils/asyncHandler");
+const EntitlementService = require("../services/entitlementService").default;
+const Workspace = require("../models/Workspace");
 
 /**
  * @desc    Generate Cloudinary upload signature
@@ -9,6 +11,27 @@ const asyncHandler = require("../utils/asyncHandler");
 const initUpload = asyncHandler(async (req: any, res: any) => {
   const { workspaceId } = req.params;
   const userId = req.user.id;
+
+  // Get workspace owner
+  const workspace = await Workspace.findById(workspaceId);
+  if (!workspace) {
+    return res.status(404).json({
+      success: false,
+      message: "Workspace not found"
+    });
+  }
+
+  const ownerId = workspace.owner.toString();
+
+  // Check entitlement
+  const entitlement = await EntitlementService.canUploadFile(ownerId);
+  if (!entitlement.allowed) {
+    return res.status(403).json({
+      success: false,
+      message: entitlement.reason || 'Cannot upload file',
+      code: 'FILE_LIMIT_REACHED'
+    });
+  }
 
   const signature = await workspaceFileService.generateUploadSignature(
     workspaceId,

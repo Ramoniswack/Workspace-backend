@@ -1,5 +1,6 @@
 const directMessageService = require("../services/directMessageService");
 const asyncHandler = require("../utils/asyncHandler");
+const EntitlementService = require("../services/entitlementService").default;
 
 /**
  * @desc    Start or get conversation with a user
@@ -32,11 +33,24 @@ const sendMessage = asyncHandler(async (req: any, res: any) => {
   const { userId: targetUserId } = req.params;
   const { content } = req.body;
 
+  // Check entitlement
+  const entitlement = await EntitlementService.canSendDirectMessage(senderId, targetUserId);
+  if (!entitlement.allowed) {
+    return res.status(403).json({
+      success: false,
+      message: entitlement.reason || 'Cannot send direct message',
+      code: 'DM_LIMIT_REACHED'
+    });
+  }
+
   const result = await directMessageService.sendMessage({
     senderId,
     targetUserId,
     content,
   });
+
+  // Invalidate cache after sending message
+  EntitlementService.invalidateEntitlementCache(senderId);
 
   res.status(201).json({
     success: true,

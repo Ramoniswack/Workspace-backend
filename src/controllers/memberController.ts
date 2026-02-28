@@ -38,24 +38,28 @@ const getWorkspaceMembers = asyncHandler(
       }))
     });
 
-    // Format response - only return ACTIVE members (or members without status field for backwards compatibility)
+    // Format response - return ALL members regardless of clock-in status
+    // The status field is for time tracking (active/inactive = clocked in/out), not for member visibility
     const members = workspace.members
       .filter((member: any) => {
-        const isActive = !member.status || member.status === 'active';
+        // Only filter out if user data is missing (deleted users)
+        const hasUserData = member.user && (member.user._id || member.user.name);
         console.log('[MemberController] Filtering member:', {
           userId: member.user?._id || member.user,
+          role: member.role,
           status: member.status,
-          isActive
+          hasUserData
         });
-        return isActive;
+        return hasUserData;
       })
       .map((member: any) => ({
         _id: member.user._id,
         name: member.user.name,
         email: member.user.email,
         role: member.role,
-        status: member.status || 'active',
+        status: member.status || 'inactive',
         isOwner: workspace.owner.toString() === member.user._id.toString(),
+        customRoleTitle: member.customRoleTitle,
       }));
 
     console.log('[MemberController] Active members retrieved', { 
@@ -214,13 +218,22 @@ const removeMember = asyncHandler(
       return next(new AppError("Member not found in workspace", 404));
     }
 
-    // Mark member as inactive instead of removing them
-    // This allows the slot to be reused for new members
-    workspace.members[memberIndex].status = 'inactive';
+    // Actually remove the member from the array
+    workspace.members.splice(memberIndex, 1);
     await workspace.save();
 
-    console.log('[RemoveMember] Member marked as inactive:', userId);
-    console.log('[RemoveMember] Active members:', workspace.members.filter((m: any) => m.status === 'active').length);
+    console.log('[RemoveMember] Member removed from workspace:', userId);
+    console.log('[RemoveMember] Remaining members:', workspace.members.length);
+
+    // Emit socket event for real-time updates
+    const io = require('../server').io;
+    if (io) {
+      io.to(workspaceId).emit('member:removed', {
+        workspaceId,
+        userId,
+        removedBy: currentUserId
+      });
+    }
 
     res.status(200).json({
       success: true,

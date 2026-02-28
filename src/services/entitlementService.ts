@@ -5,6 +5,10 @@ const Space = require('../models/Space');
 const List = require('../models/List');
 const Folder = require('../models/Folder');
 const Task = require('../models/Task');
+const CustomTable = require('../models/CustomTable');
+const User = require('../models/User');
+const Plan = require('../models/Plan');
+const PlanInheritanceService = require('./planInheritanceService').default;
 
 interface TotalUsage {
     totalWorkspaces: number;
@@ -12,7 +16,24 @@ interface TotalUsage {
     totalLists: number;
     totalFolders: number;
     totalTasks: number;
+    totalTables: number;
+    totalRows: number;
 }
+
+// Cache for usage calculations (5-minute TTL)
+interface CacheEntry {
+    usage: TotalUsage;
+    expires: number;
+}
+
+// Cache for entitlement checks (5-minute TTL)
+interface EntitlementCacheEntry {
+    result: { allowed: boolean; reason?: string };
+    expires: number;
+}
+
+const usageCache = new Map<string, CacheEntry>();
+const entitlementCache = new Map<string, EntitlementCacheEntry>();
 
 /**
  * EntitlementService
@@ -28,68 +49,236 @@ class EntitlementService {
         try {
             console.log(`[EntitlementService] Calculating total usage for owner: ${ownerId}`);
 
-            // Get all workspaces owned by this user (not deleted)
-            const workspaces = await Workspace.find({
-                owner: ownerId,
-                isDeleted: false
-            }).select('_id').lean();
+            // Check cache first
+            const cacheKey = `usage:${ownerId}`;
+            const cached = usageCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                console.log(`[EntitlementService] Returning cached usage for owner ${ownerId}`);
+                return cached.usage;
+            }
 
-            const workspaceIds = workspaces.map((w: any) => w._id);
-            const totalWorkspaces = workspaces.length;
-
-            console.log(`[EntitlementService] Found ${totalWorkspaces} workspaces for owner ${ownerId}`);
+            // Use aggregation pipeline to calculate all usage in 1-2 queries
+            // Query 1: Get workspace-level counts (workspaces, spaces, lists, tasks)
+            const workspaceAggregation = await Workspace.aggregate([
+                {
+                    // Match workspaces owned by this user
+                    $match: {
+                        owner: new mongoose.Types.ObjectId(ownerId),
+                        isDeleted: false
+                    }
+                },
+                {
+                    // Lookup spaces for these workspaces
+                    $lookup: {
+                        from: 'spaces',
+                        let: { workspaceId: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            { $eq: ['$workspace', '$$workspaceId'] },
+                                            { $eq: ['$isDeleted', false] }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: 'spaces'
+                    }
+                },
+                {
+                    // Lookup lists for these workspaces
+                    $lookup: {
+                        from: 'lists',
+                        let: { workspaceId: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            { $eq: ['$workspace', '$$workspaceId'] },
+                                            { $eq: ['$isDeleted', false] }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: 'lists'
+                    }
+                },
+                {
+                    // Lookup tasks for these workspaces
+                    $lookup: {
+                        from: 'tasks',
+                        let: { workspaceId: '$_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            { $eq: ['$workspace', '$$workspaceId'] },
+                                            { $eq: ['$isDeleted', false] }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: 'tasks'
+                    }
+                },
+                {
+                    // Project to calculate sizes
+                    $project: {
+                        spaceCount: { $size: '$spaces' },
+                        listCount: { $size: '$lists' },
+                        taskCount: { $size: '$tasks' },
+                        spaceIds: '$spaces._id'
+                    }
+                },
+                {
+                    // Group to get totals
+                    $group: {
+                        _id: null,
+                        totalWorkspaces: { $sum: 1 },
+                        totalSpaces: { $sum: '$spaceCount' },
+                        totalLists: { $sum: '$listCount' },
+                        totalTasks: { $sum: '$taskCount' },
+                        allSpaceIds: { $push: '$spaceIds' }
+                    }
+                }
+            ]);
 
             // If no workspaces, return zeros
-            if (totalWorkspaces === 0) {
-                return {
+            if (workspaceAggregation.length === 0) {
+                const usage: TotalUsage = {
                     totalWorkspaces: 0,
                     totalSpaces: 0,
                     totalLists: 0,
                     totalFolders: 0,
-                    totalTasks: 0
+                    totalTasks: 0,
+                    totalTables: 0,
+                    totalRows: 0
                 };
+                
+                // Cache the result
+                usageCache.set(cacheKey, {
+                    usage,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                
+                return usage;
             }
 
-            // Count spaces across all workspaces
-            const totalSpaces = await Space.countDocuments({
-                workspace: { $in: workspaceIds },
-                isDeleted: false
-            });
+            const workspaceResult = workspaceAggregation[0];
+            
+            // Flatten the array of space ID arrays
+            const spaceIds = workspaceResult.allSpaceIds.flat();
 
-            // Get all space IDs for these workspaces
-            const spaces = await Space.find({
-                workspace: { $in: workspaceIds },
-                isDeleted: false
-            }).select('_id').lean();
-            const spaceIds = spaces.map((s: any) => s._id);
+            // Query 2: Get space-level counts (folders, tables, rows)
+            let totalFolders = 0;
+            let totalTables = 0;
+            let totalRows = 0;
 
-            // Count lists across all workspaces
-            const totalLists = await List.countDocuments({
-                workspace: { $in: workspaceIds },
-                isDeleted: false
-            });
+            if (spaceIds.length > 0) {
+                const spaceAggregation = await Space.aggregate([
+                    {
+                        // Match spaces by IDs
+                        $match: {
+                            _id: { $in: spaceIds }
+                        }
+                    },
+                    {
+                        // Lookup folders for these spaces
+                        $lookup: {
+                            from: 'folders',
+                            let: { spaceId: '$_id' },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $and: [
+                                                { $eq: ['$spaceId', '$$spaceId'] },
+                                                { $eq: ['$isDeleted', false] }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ],
+                            as: 'folders'
+                        }
+                    },
+                    {
+                        // Lookup tables for these spaces
+                        $lookup: {
+                            from: 'customtables',
+                            let: { spaceId: '$_id' },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $and: [
+                                                { $eq: ['$spaceId', '$$spaceId'] },
+                                                { $eq: ['$isDeleted', false] }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ],
+                            as: 'tables'
+                        }
+                    },
+                    {
+                        // Project to calculate sizes and row counts
+                        $project: {
+                            folderCount: { $size: '$folders' },
+                            tableCount: { $size: '$tables' },
+                            rowCount: {
+                                $sum: {
+                                    $map: {
+                                        input: '$tables',
+                                        as: 'table',
+                                        in: { $size: '$$table.rows' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        // Group to get totals
+                        $group: {
+                            _id: null,
+                            totalFolders: { $sum: '$folderCount' },
+                            totalTables: { $sum: '$tableCount' },
+                            totalRows: { $sum: '$rowCount' }
+                        }
+                    }
+                ]);
 
-            // Count folders across all spaces (folders are linked to spaces, not workspaces)
-            const totalFolders = await Folder.countDocuments({
-                spaceId: { $in: spaceIds },
-                isDeleted: false
-            });
-
-            // Count tasks across all workspaces
-            const totalTasks = await Task.countDocuments({
-                workspace: { $in: workspaceIds },
-                isDeleted: false
-            });
+                if (spaceAggregation.length > 0) {
+                    totalFolders = spaceAggregation[0].totalFolders;
+                    totalTables = spaceAggregation[0].totalTables;
+                    totalRows = spaceAggregation[0].totalRows;
+                }
+            }
 
             const usage: TotalUsage = {
-                totalWorkspaces,
-                totalSpaces,
-                totalLists,
+                totalWorkspaces: workspaceResult.totalWorkspaces,
+                totalSpaces: workspaceResult.totalSpaces,
+                totalLists: workspaceResult.totalLists,
                 totalFolders,
-                totalTasks
+                totalTasks: workspaceResult.totalTasks,
+                totalTables,
+                totalRows
             };
 
             console.log(`[EntitlementService] Total usage for owner ${ownerId}:`, usage);
+
+            // Cache the result for 5 minutes
+            usageCache.set(cacheKey, {
+                usage,
+                expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+            });
 
             return usage;
         } catch (error) {
@@ -112,6 +301,547 @@ class EntitlementService {
             return workspace.owner.toString();
         } catch (error) {
             console.error(`[EntitlementService] Error getting workspace owner:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Invalidate usage cache for a specific owner
+     * @param ownerId - The owner's user ID
+     */
+    invalidateUsageCache(ownerId: string): void {
+        const cacheKey = `usage:${ownerId}`;
+        usageCache.delete(cacheKey);
+        console.log(`[EntitlementService] Invalidated usage cache for owner ${ownerId}`);
+    }
+
+    /**
+     * Invalidate entitlement cache for a specific user
+     * This should be called when a user's plan changes
+     * @param userId - The user's ID
+     */
+    invalidateEntitlementCache(userId: string): void {
+        // Clear all entitlement cache entries for this user
+        const keysToDelete: string[] = [];
+        entitlementCache.forEach((_, key) => {
+            if (key.startsWith(`${userId}:`)) {
+                keysToDelete.push(key);
+            }
+        });
+        
+        keysToDelete.forEach(key => entitlementCache.delete(key));
+        console.log(`[EntitlementService] Invalidated entitlement cache for user ${userId} (${keysToDelete.length} entries)`);
+    }
+
+    /**
+     * Get user's subscription plan with inheritance resolved
+     * @param userId - The user's ID
+     * @returns Resolved plan features or null if no plan
+     */
+    private async getUserPlan(userId: string): Promise<any> {
+        try {
+            const user = await User.findById(userId).populate('subscription.planId');
+            if (!user || !user.subscription?.planId) {
+                // Return free plan
+                const freePlan = await Plan.findOne({ name: 'Free' });
+                return freePlan;
+            }
+            return user.subscription.planId;
+        } catch (error) {
+            console.error(`[EntitlementService] Error getting user plan:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can use custom roles feature
+     * @param userId - The user's ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canUseCustomRoles(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            // Check cache first
+            const cacheKey = `${userId}:customRoles`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                console.log(`[EntitlementService] Returning cached custom roles entitlement for user ${userId}`);
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Resolve features with inheritance
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+            const canUse = resolvedFeatures.canUseCustomRoles || false;
+            
+            let result: { allowed: boolean; reason?: string };
+            if (!canUse) {
+                result = { 
+                    allowed: false, 
+                    reason: 'Custom roles feature is not available in your current plan' 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            // Cache the result
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking custom roles entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can create a new table
+     * @param userId - The user's ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canCreateTable(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            // Check cache first
+            const cacheKey = `${userId}:createTable`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                console.log(`[EntitlementService] Returning cached create table entitlement for user ${userId}`);
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Resolve features with inheritance
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+
+            // Check if feature is enabled
+            const canCreate = resolvedFeatures.canCreateTables || false;
+            if (!canCreate) {
+                const result = { 
+                    allowed: false, 
+                    reason: 'Custom tables feature is not available in your current plan' 
+                };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Check table count limit
+            const maxTables = resolvedFeatures.maxTablesCount || 0;
+            if (maxTables === -1) {
+                // Unlimited
+                const result = { allowed: true };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Get current usage
+            const usage = await this.getTotalUsage(userId);
+            
+            let result: { allowed: boolean; reason?: string };
+            if (usage.totalTables >= maxTables) {
+                result = { 
+                    allowed: false, 
+                    reason: `Table limit reached (${usage.totalTables}/${maxTables})` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            // Cache the result
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking table creation entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can add a new row
+     * @param userId - The user's ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canAddRow(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            // Check cache first
+            const cacheKey = `${userId}:addRow`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                console.log(`[EntitlementService] Returning cached add row entitlement for user ${userId}`);
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Resolve features with inheritance
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+
+            // Check row limit
+            const maxRows = resolvedFeatures.maxRowsLimit || 0;
+            if (maxRows === -1 || maxRows === 0) {
+                // Unlimited or no limit set
+                const result = { allowed: true };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Get current usage
+            const usage = await this.getTotalUsage(userId);
+            
+            let result: { allowed: boolean; reason?: string };
+            if (usage.totalRows >= maxRows) {
+                result = { 
+                    allowed: false, 
+                    reason: `Row limit reached (${usage.totalRows}/${maxRows})` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            // Cache the result
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking row addition entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can add a new column
+     * @param userId - The user's ID
+     * @param tableId - The table ID to check column count for
+     * @returns Object with allowed status and optional reason
+     */
+    async canAddColumn(userId: string, tableId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            // Check cache first
+            const cacheKey = `${userId}:addColumn:${tableId}`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                console.log(`[EntitlementService] Returning cached add column entitlement for user ${userId}`);
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Resolve features with inheritance
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+
+            // Check column limit
+            const maxColumns = resolvedFeatures.maxColumnsLimit || 0;
+            if (maxColumns === -1 || maxColumns === 0) {
+                // Unlimited or no limit set
+                const result = { allowed: true };
+                // Cache the result
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+                });
+                return result;
+            }
+
+            // Get current column count for this table
+            const CustomTable = require('../models/CustomTable');
+            const table = await CustomTable.findById(tableId);
+            if (!table) {
+                const result = { allowed: false, reason: 'Table not found' };
+                return result;
+            }
+
+            const currentColumns = table.columns?.length || 0;
+            
+            let result: { allowed: boolean; reason?: string };
+            if (currentColumns >= maxColumns) {
+                result = { 
+                    allowed: false, 
+                    reason: `Column limit reached (${currentColumns}/${maxColumns})` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            // Cache the result
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking column addition entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can upload a new file
+     * @param userId - The user's ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canUploadFile(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            const cacheKey = `${userId}:uploadFile`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+            const maxFiles = resolvedFeatures.maxFiles || 0;
+            
+            if (maxFiles === -1) {
+                const result = { allowed: true };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            // Count files across all workspaces owned by user
+            const WorkspaceFile = require('../models/WorkspaceFile');
+            const workspaces = await Workspace.find({ owner: userId, isDeleted: false }).select('_id');
+            const workspaceIds = workspaces.map((w: any) => w._id);
+            
+            const fileCount = await WorkspaceFile.countDocuments({
+                workspace: { $in: workspaceIds },
+                isDeleted: false
+            });
+
+            let result: { allowed: boolean; reason?: string };
+            if (fileCount >= maxFiles) {
+                result = { 
+                    allowed: false, 
+                    reason: `File limit reached (${fileCount}/${maxFiles})` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking file upload entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can create a new document
+     * @param userId - The user's ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canCreateDocument(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            const cacheKey = `${userId}:createDocument`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(userId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+            const maxDocuments = resolvedFeatures.maxDocuments || 0;
+            
+            if (maxDocuments === -1) {
+                const result = { allowed: true };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            // Count documents in workspaces owned by user
+            const Document = require('../models/Document');
+            const workspaces = await Workspace.find({ owner: userId, isDeleted: false }).select('_id');
+            const workspaceIds = workspaces.map((w: any) => w._id);
+            
+            const documentCount = await Document.countDocuments({
+                workspace: { $in: workspaceIds },
+                isArchived: false
+            });
+
+            let result: { allowed: boolean; reason?: string };
+            if (documentCount >= maxDocuments) {
+                result = { 
+                    allowed: false, 
+                    reason: `Document limit reached (${documentCount}/${maxDocuments})` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking document creation entitlement:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can send a direct message to another user
+     * @param senderId - The sender's user ID
+     * @param recipientId - The recipient's user ID
+     * @returns Object with allowed status and optional reason
+     */
+    async canSendDirectMessage(senderId: string, recipientId: string): Promise<{ allowed: boolean; reason?: string }> {
+        try {
+            const cacheKey = `${senderId}:sendDM:${recipientId}`;
+            const cached = entitlementCache.get(cacheKey);
+            if (cached && Date.now() < cached.expires) {
+                return cached.result;
+            }
+
+            const plan = await this.getUserPlan(senderId);
+            if (!plan) {
+                const result = { allowed: false, reason: 'No subscription plan found' };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            const resolvedFeatures = await PlanInheritanceService.resolveFeatures(plan);
+            const maxMessagesPerUser = resolvedFeatures.maxDirectMessagesPerUser || 0;
+            
+            if (maxMessagesPerUser === -1) {
+                const result = { allowed: true };
+                entitlementCache.set(cacheKey, {
+                    result,
+                    expires: Date.now() + 5 * 60 * 1000
+                });
+                return result;
+            }
+
+            // Find conversation between sender and recipient
+            const Conversation = require('../models/Conversation');
+            const DirectMessage = require('../models/DirectMessage');
+            
+            // Sort participants for consistent ordering (same as service does)
+            const participants = [senderId, recipientId].sort();
+            
+            const conversation = await Conversation.findOne({
+                participants: { $all: participants }
+            });
+
+            let messageCount = 0;
+            if (conversation) {
+                // Count messages sent by sender in this conversation
+                messageCount = await DirectMessage.countDocuments({
+                    conversation: conversation._id,
+                    sender: senderId
+                });
+            }
+            // If no conversation exists, messageCount stays 0 (first message)
+
+            let result: { allowed: boolean; reason?: string };
+            if (messageCount >= maxMessagesPerUser) {
+                result = { 
+                    allowed: false, 
+                    reason: `Direct message limit reached (${messageCount}/${maxMessagesPerUser} messages to this user)` 
+                };
+            } else {
+                result = { allowed: true };
+            }
+
+            entitlementCache.set(cacheKey, {
+                result,
+                expires: Date.now() + 5 * 60 * 1000
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`[EntitlementService] Error checking direct message entitlement:`, error);
             throw error;
         }
     }

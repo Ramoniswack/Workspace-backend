@@ -1,6 +1,7 @@
 const Document = require("../models/Document");
 const Workspace = require("../models/Workspace");
 const AppError = require("../utils/AppError");
+const EntitlementService = require("../services/entitlementService").default;
 
 /**
  * Create a new document
@@ -12,6 +13,7 @@ exports.createDocument = async (req: any, res: any, next: any) => {
     const userId = req.user.id;
 
     // If workspace is provided, verify user has access
+    let ownerId = userId;
     if (workspaceId) {
       const workspace = await Workspace.findById(workspaceId);
       if (!workspace) {
@@ -25,6 +27,18 @@ exports.createDocument = async (req: any, res: any, next: any) => {
       if (!isMember) {
         return next(new AppError("You do not have access to this workspace", 403));
       }
+
+      ownerId = workspace.owner.toString();
+    }
+
+    // Check entitlement
+    const entitlement = await EntitlementService.canCreateDocument(ownerId);
+    if (!entitlement.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: entitlement.reason || 'Cannot create document',
+        code: 'DOCUMENT_LIMIT_REACHED'
+      });
     }
 
     const document = await Document.create({
@@ -38,6 +52,9 @@ exports.createDocument = async (req: any, res: any, next: any) => {
         content: []
       }
     });
+
+    // Invalidate cache after creating document
+    EntitlementService.invalidateEntitlementCache(ownerId);
 
     res.status(201).json({
       success: true,

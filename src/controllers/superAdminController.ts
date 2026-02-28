@@ -129,6 +129,11 @@ const updateUserSubscription = asyncHandler(async (req: any, res: any) => {
 
   await user.save();
 
+  // Invalidate entitlement cache when plan changes
+  const EntitlementService = require('../services/entitlementService').default;
+  EntitlementService.invalidateEntitlementCache(userId);
+  EntitlementService.invalidateUsageCache(userId);
+
   // Get updated user with plan details
   const updatedUser = await User.findById(userId).populate('subscription.planId');
 

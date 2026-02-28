@@ -285,6 +285,25 @@ async function getWorkspaceId(req: AuthRequest): Promise<string | null> {
     }
   }
 
+  // Get from table
+  const tableId =
+    req.params.tableId ||
+    (req.baseUrl === "/api/tables" && req.params.id);
+
+  if (tableId) {
+    console.log('[getWorkspaceId] Resolving workspace from tableId:', tableId);
+    const CustomTable = require("../models/CustomTable");
+    const table = await CustomTable.findById(tableId).select("spaceId");
+    console.log('[getWorkspaceId] Table found:', !!table, 'spaceId:', table?.spaceId);
+    if (table && table.spaceId) {
+      const space = await Space.findById(table.spaceId).select("workspace");
+      console.log('[getWorkspaceId] Space found:', !!space, 'workspace:', space?.workspace);
+      if (space) {
+        return space.workspace.toString();
+      }
+    }
+  }
+
   return null;
 }
 

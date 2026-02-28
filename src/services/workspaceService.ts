@@ -240,6 +240,37 @@ class WorkspaceService {
       currentRunningTimer // Crucial for persistence
     };
   }
+
+  async updateMemberCustomRole(workspaceId: string, memberId: string, customRoleTitle: string | null) {
+    const workspace = await Workspace.findOne({
+      _id: workspaceId,
+      isDeleted: false
+    });
+
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404);
+    }
+
+    // Find the member in the workspace
+    const member = workspace.members.find((m: any) => m.user.toString() === memberId);
+
+    if (!member) {
+      throw new AppError("Member not found in this workspace", 404);
+    }
+
+    // Update the custom role title
+    member.customRoleTitle = customRoleTitle;
+
+    await workspace.save();
+
+    // Populate the member user data for the response
+    await workspace.populate("members.user", "name email avatar");
+
+    // Find and return the updated member
+    const updatedMember = workspace.members.find((m: any) => m.user._id.toString() === memberId);
+
+    return updatedMember;
+  }
 }
 
 module.exports = new WorkspaceService();
