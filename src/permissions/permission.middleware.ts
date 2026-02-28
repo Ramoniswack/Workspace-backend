@@ -116,9 +116,9 @@ async function getSpaceId(req: AuthRequest): Promise<string | undefined> {
     (req.baseUrl === "/api/folders" && req.params.id);
 
   if (folderId && typeof folderId === 'string') {
-    const folder = await Folder.findById(folderId).select("space");
-    if (folder) {
-      return folder.space.toString();
+    const folder = await Folder.findById(folderId).select("spaceId");
+    if (folder && folder.spaceId) {
+      return folder.spaceId.toString();
     }
   }
 
@@ -244,9 +244,18 @@ async function getWorkspaceId(req: AuthRequest): Promise<string | null> {
     (req.baseUrl === "/api/folders" && req.params.id);
 
   if (folderId) {
-    const folder = await Folder.findById(folderId).select("workspace");
-    if (folder) {
-      return folder.workspace.toString();
+    const folder = await Folder.findById(folderId).populate('spaceId', 'workspace');
+    if (folder && folder.spaceId) {
+      // Check if spaceId is populated (object) or just an ID (string)
+      if (typeof folder.spaceId === 'object' && (folder.spaceId as any).workspace) {
+        return (folder.spaceId as any).workspace.toString();
+      } else if (typeof folder.spaceId === 'string') {
+        // If not populated, get the space separately
+        const space = await Space.findById(folder.spaceId).select('workspace');
+        if (space && space.workspace) {
+          return space.workspace.toString();
+        }
+      }
     }
   }
 

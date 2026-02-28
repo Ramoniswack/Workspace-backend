@@ -224,7 +224,7 @@ class InvitationService {
           members: {
             user: userId,
             role: invitation.role,
-            status: "active"  // Explicitly set status to active
+            status: "inactive"  // New members start clocked out by default
           }
         }
       },

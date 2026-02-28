@@ -280,7 +280,7 @@ const inviteMember = asyncHandler(
       
       // If member is inactive, reactivate them
       console.log('[InviteMember] Reactivating previously removed member:', user.email);
-      workspace.members[existingMemberIndex].status = 'active';
+      workspace.members[existingMemberIndex].status = 'inactive'; // Reactivated members start clocked out
       workspace.members[existingMemberIndex].role = role;
       await workspace.save();
       
@@ -301,7 +301,7 @@ const inviteMember = asyncHandler(
     workspace.members.push({
       user: user._id,
       role: role,
-      status: 'active', // Explicitly set as active
+      status: 'inactive', // New members start clocked out by default
     });
 
     await workspace.save();

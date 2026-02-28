@@ -18,6 +18,10 @@ interface IPlan extends Document {
     messageLimit: number;
     announcementCooldown: number;
     accessControlTier: 'none' | 'basic' | 'pro' | 'advanced';
+    canUseCustomRoles: boolean;
+    canCreateTables: boolean;
+    maxTablesCount: number;
+    maxRowsLimit: number;
   };
   isActive: boolean;
   createdAt: Date;
@@ -117,6 +121,28 @@ const planSchema = new mongoose.Schema(
         enum: ['none', 'basic', 'pro', 'advanced'],
         required: true,
         default: 'none'
+      },
+      canUseCustomRoles: {
+        type: Boolean,
+        required: true,
+        default: false
+      },
+      canCreateTables: {
+        type: Boolean,
+        required: true,
+        default: false
+      },
+      maxTablesCount: {
+        type: Number,
+        required: true,
+        min: -1, // -1 means unlimited
+        default: 0
+      },
+      maxRowsLimit: {
+        type: Number,
+        required: true,
+        min: -1, // -1 means unlimited
+        default: 0
       }
     },
     isActive: {

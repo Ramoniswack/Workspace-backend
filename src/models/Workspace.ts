@@ -14,6 +14,7 @@ export interface IWorkspaceMember {
   user: Schema.Types.ObjectId;
   role: WorkspaceRole | "owner" | "admin" | "member" | "guest";
   status?: "active" | "inactive";
+  customRoleTitle?: string;
 }
 
 export interface IWorkspace extends Document {
@@ -56,6 +57,12 @@ const workspaceSchema = new mongoose.Schema(
           type: String,
           enum: ["active", "inactive"],
           default: "active"  // Changed from "inactive" to "active"
+        },
+        customRoleTitle: {
+          type: String,
+          trim: true,
+          maxlength: [50, "Custom role title cannot exceed 50 characters"],
+          default: null
         }
       }
     ],

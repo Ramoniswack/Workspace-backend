@@ -17,7 +17,7 @@ class WorkspaceService {
         {
           user: data.owner,
           role: "owner",
-          status: "active" // Owner should be active by default
+          status: "inactive" // Owner starts clocked out by default
         }
       ]
     });
